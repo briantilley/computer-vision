@@ -1,0 +1,8 @@
+Goals:
+	Implement pipline from compressed video input to feature processing
+	Implement feedback and control loop for video settings (e.g.: focus, exposure)
+	Render digital scene based on gained information
+	Create modular base to extend above goals
+
+video pipeline:
+	webcam input -> video decoder -> image filters -> feature recognition -> feature processing -> scene render
