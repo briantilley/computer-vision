@@ -10,7 +10,7 @@ DBG=debug
 CPP_OPTS=-std=gnu++11
 CUDA_OPTS=-std=c++11
 
-all: host
+all: host video
 	$(CUDA) *.o -o $(EXE) $(CUDA_OPTS)
 
 host: host.cpp
