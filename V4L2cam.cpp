@@ -172,6 +172,7 @@ CodedFrame V4L2cam::retrieveCodedFrame(void)
 {
 	// returned by this function
 	CodedFrame returnFrame;
+	float timestamp;
 
 	// pull frame buffer out of v4l2's queue
 	if(-1 == xioctl(fileDescriptor, VIDIOC_DQBUF, &workingBuffer))
@@ -181,7 +182,9 @@ CodedFrame V4L2cam::retrieveCodedFrame(void)
 	}
 
 	// create a copy of the data to return
-	returnFrame = CodedFrame(buffers[workingBuffer.index].start, workingBuffer.bytesused);
+	timestamp = workingBuffer.timestamp.tv_sec * 1000000;
+	timestamp += workingBuffer.timestamp.tv_usec;
+	returnFrame = CodedFrame(buffers[workingBuffer.index].start, workingBuffer.bytesused, timestamp);
 
 	// re-queue the buffer for v4l2
 	if(-1 == xioctl(fileDescriptor, VIDIOC_QBUF, &workingBuffer))

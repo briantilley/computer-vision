@@ -4,12 +4,11 @@
 std::map<const byte*, int> CodedFrame::allocations;
 
 // copy raw data and wrap in object
-CodedFrame::CodedFrame(const byte* _data, unsigned _length)
-{
+CodedFrame::CodedFrame(const byte* _data, unsigned _length, float _timestamp): length(_length), m_timestamp(_timestamp)
+{	
+	/*
 	// store size and allocate space
 	length = _length;
-	
-	/*
 	data = new byte[length];
 
 	// C-style copy is OK because data is only raw bytes
@@ -34,6 +33,7 @@ CodedFrame::CodedFrame(const CodedFrame& toCopy)
 {
 	// store size and allocate space
 	length = toCopy.size();
+	m_timestamp = toCopy.timestamp();
 
 	/*
 	data = new byte[length];
@@ -56,6 +56,7 @@ void CodedFrame::operator=(const CodedFrame& right)
 
 	// store size and allocate space
 	length = right.size();
+	m_timestamp = right.timestamp();
 	
 	/*
 	data = new byte[length];

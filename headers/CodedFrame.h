@@ -22,6 +22,7 @@ private:
 	// byte* data = nullptr;
 	std::map<const byte*, int>::iterator allocationIterator;
 	unsigned length = 0;
+	unsigned m_timestamp; // time value in microseconds (absolute value is arbitrary)
 
 	// track the number of instances associated with each byte array
 	static std::map<const byte*, int> allocations;
@@ -31,7 +32,7 @@ public:
 	CodedFrame(void) { } // leave initialized as empty frame
 
 	// copy raw data and wrap in object
-	CodedFrame(const byte* _data, unsigned _length);
+	CodedFrame(const byte* _data, unsigned _length, float _timestamp);
 	
 	// copy constructor (same behavior as above)
 	CodedFrame(const CodedFrame& toCopy);
@@ -47,6 +48,7 @@ public:
 
 	unsigned size(void) const { return length; } // size of allocation
 	const byte* raw_data(void) const { return allocationIterator->first; } // immutable information contained
+	float timestamp(void) const { return m_timestamp; } // capture time of frame
 };
 
 #endif
