@@ -6,3 +6,8 @@ Goals:
 
 video pipeline:
 	webcam input -> video decoder -> decoded queue -> image filters -> feature recognition -> feature processing -> scene render
+
+notes:
+	include input and output queues in decode class (hide implementation of callbacks)
+	copy from buffers (V4L2, nvcuvid) to queues (ignore performance issue for now)
+	time framerate, etc w/ std::chrono
