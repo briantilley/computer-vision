@@ -100,6 +100,7 @@ V4L2cam::V4L2cam(std::string device, dataFormat format, unsigned& width, unsigne
 		}
 
 		buffers[i].start = (byte*)mmap(NULL, workingBuffer.length, PROT_READ | PROT_WRITE, MAP_SHARED, fileDescriptor, workingBuffer.m.offset);
+		buffers[i].size = workingBuffer.length;
 
 		if(MAP_FAILED == buffers[i].start)
 		{
@@ -124,6 +125,8 @@ V4L2cam::~V4L2cam()
 {
 	// shut off and free memory
 	streamOff();
+	for(int i = 0; i < bufferCount; ++i)
+		munmap(buffers[i].start, buffers[i].size); // allocated with mmap()
 	delete [] buffers;
 }
 

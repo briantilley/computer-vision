@@ -88,7 +88,7 @@ private:
 	typedef struct _frameBuffer
 	{
 		byte* start;
-		unsigned length;
+		unsigned size; // stored for call to munmap() on deletion
 	} frameBuffer;
 
 	int fileDescriptor;
