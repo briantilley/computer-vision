@@ -18,6 +18,7 @@ host: host.cpp
 
 video: V4L2cam.cpp
 	$(CPP) V4L2cam.cpp -c $(CPP_OPTS)
+	$(CPP) CodedFrame.cpp -c $(CPP_OPTS)
 
 clean:
 	rm -rf *.o $(EXE) $(DBG)

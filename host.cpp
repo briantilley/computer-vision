@@ -17,7 +17,7 @@ int main(void)
 	{
 		frame = webcam.retrieveCodedFrame();
 
-		cout << frame.size();
+		cout << frame.size() << "/" << static_cast<short>(frame.raw_data()[frame.size() - 1]);
 
 		if(4 == i % 5)
 			cout << endl;

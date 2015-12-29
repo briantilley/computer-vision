@@ -1,8 +1,5 @@
 #include <iostream> // development
 
-// // explicit datatype names (int32_t, uint8_t, etc)
-// #include <unistd.h>
-
 #include "headers/V4L2cam.h"
 
 // specifying number of buffers is optional
@@ -51,8 +48,8 @@ V4L2cam::V4L2cam(std::string device, dataFormat format, unsigned& width, unsigne
 
 	ext_ctrls.count = 2;
 	ext_ctrls.ctrl_class = V4L2_CTRL_CLASS_CAMERA;
-	ext_ctrls.controls = (v4l2_ext_control*)malloc(2 * sizeof(v4l2_ext_control));
-	// ext_ctrls.controls = new v4l2_ext_control[2];
+	// ext_ctrls.controls = (v4l2_ext_control*)malloc(2 * sizeof(v4l2_ext_control));
+	ext_ctrls.controls = new v4l2_ext_control[2];
 
 	ext_ctrls.controls[0].id     = V4L2_CID_EXPOSURE_AUTO;
 	ext_ctrls.controls[0].value  = V4L2_EXPOSURE_MANUAL;
@@ -66,8 +63,8 @@ V4L2cam::V4L2cam(std::string device, dataFormat format, unsigned& width, unsigne
 		exit(1);
 	}
 
-	free(ext_ctrls.controls);
-	// delete [] ext_ctrls.controls;
+	// free(ext_ctrls.controls);
+	delete [] ext_ctrls.controls;
 
 	request_bufs.count                 = bufferCount;
 	request_bufs.type                  = formatStruct.type;
@@ -162,12 +159,12 @@ int V4L2cam::streamOff(void)
 
 int V4L2cam::setExposure(float exposure)
 {
-	return 0;
+	return 1;
 }
 
 int V4L2cam::changeExposure(bool increase, float deltaExposure)
 {
-	return 0;
+	return 1;
 }
 
 // get an encoded frame of data
@@ -182,9 +179,6 @@ CodedFrame V4L2cam::retrieveCodedFrame(void)
 		std::cerr << "error while retrieving frame" << std::endl;
 		exit(1);
 	}
-
-	// if ( -1 == ps_callback( buffers[ workingBuffer.index ].start, workingBuffer.bytesused ) )
-	// 	cout << "frame processing callback failed" << std::endl;
 
 	// create a copy of the data to return
 	returnFrame = CodedFrame(buffers[workingBuffer.index].start, workingBuffer.bytesused);
