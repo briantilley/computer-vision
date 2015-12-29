@@ -1,4 +1,5 @@
 Goals:
+	make a more extendable, maintainable cuda_h264_decode
 	Implement pipline from compressed video input to feature processing
 	Implement feedback and control loop for video settings (e.g.: exposure)
 	Render digital scene based on gained information
