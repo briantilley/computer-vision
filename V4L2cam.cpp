@@ -48,7 +48,6 @@ V4L2cam::V4L2cam(std::string device, dataFormat format, unsigned& width, unsigne
 
 	ext_ctrls.count = 2;
 	ext_ctrls.ctrl_class = V4L2_CTRL_CLASS_CAMERA;
-	// ext_ctrls.controls = (v4l2_ext_control*)malloc(2 * sizeof(v4l2_ext_control));
 	ext_ctrls.controls = new v4l2_ext_control[2];
 
 	ext_ctrls.controls[0].id     = V4L2_CID_EXPOSURE_AUTO;
@@ -63,7 +62,6 @@ V4L2cam::V4L2cam(std::string device, dataFormat format, unsigned& width, unsigne
 		exit(1);
 	}
 
-	// free(ext_ctrls.controls);
 	delete [] ext_ctrls.controls;
 
 	request_bufs.count                 = bufferCount;

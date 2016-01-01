@@ -22,7 +22,7 @@ private:
 	// byte* data = nullptr;
 	std::map<const byte*, int>::iterator allocationIterator;
 	unsigned length = 0;
-	unsigned m_timestamp; // time value in microseconds (absolute value is arbitrary)
+	unsigned m_timestamp = 0; // time value in microseconds (absolute value is arbitrary)
 
 	// track the number of instances associated with each byte array
 	static std::map<const byte*, int> allocations;
