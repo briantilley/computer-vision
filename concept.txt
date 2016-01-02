@@ -1,14 +1,13 @@
 Goals:
 	make a more extendable, maintainable cuda_h264_decode
-	Implement pipline from compressed video input to feature processing
+	Implement pipline from compressed video input to output
 	Implement feedback and control loop for video settings (e.g.: exposure)
 	Render digital scene based on gained information
-	Create modular base to extend above goals
+	Maintain modular base to extend the above goals
 
 video pipeline:
-	webcam input -> video decoder -> decoded queue -> image filters -> feature recognition -> feature processing -> scene render
+	webcam input -> video decoder -> decoded queue -> post processing -> display (allow for >1 display stream)
 
-notes:
-	include input and output queues in decode class (hide implementation of callbacks)
-	copy from buffers (V4L2, nvcuvid) to queues (ignore performance issue for now)
-	time framerate, etc w/ std::chrono
+threads:
+	input/decode, post-processing (maybe >1), display
+	use 2 ConcurrentQueue objects between the three threads

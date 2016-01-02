@@ -17,8 +17,11 @@ int main(void)
 	unsigned captureWidth = 1920, captureHeight = 1080;
 	V4L2cam webcam(string("/dev/video0"), h264, captureWidth, captureHeight);
 
+	// decoder output queue
+	ConcurrentQueue<GPUFrame> decodedQueue;
+
 	// decoder
-	NVdecoder gpuDecoder;
+	NVdecoder gpuDecoder(decodedQueue);
 
 	// begin
 	webcam.streamOn();

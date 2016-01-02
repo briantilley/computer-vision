@@ -57,7 +57,6 @@ public:
 
 	// constructors
 	V4L2cam(std::string device, dataFormat format, unsigned& width, unsigned& height, unsigned numBuffers=DEFAULT_BUFFER_COUNT);
-	// V4L2cam(const V4L2cam&); // copy
 
 	~V4L2cam();
 

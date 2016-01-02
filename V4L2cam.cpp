@@ -111,11 +111,6 @@ V4L2cam::V4L2cam(std::string device, dataFormat format, unsigned& width, unsigne
 	}
 }
 
-// V4L2cam::V4L2cam(const V4L2cam&)
-// {
-
-// }
-
 V4L2cam::~V4L2cam()
 {
 	// shut off and free memory

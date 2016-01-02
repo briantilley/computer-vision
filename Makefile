@@ -19,9 +19,8 @@ all: host video decode
 host: host.cpp
 	$(CPP) host.cpp -c $(CPP_OPTS)
 
-video: V4L2cam.cpp CodedFrame.cpp
+video: V4L2cam.cpp
 	$(CPP) V4L2cam.cpp -c $(CPP_OPTS)
-	$(CPP) CodedFrame.cpp -c $(CPP_OPTS)
 
 decode: NVdecoder.cpp GPUFrame.cpp
 	$(CPP) NVdecoder.cpp -c $(CPP_OPTS)

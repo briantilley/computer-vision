@@ -88,11 +88,8 @@ CUvideoctxlock NVdecoder::s_lock;
 bool NVdecoder::s_lockInitialized = false;
 int NVdecoder::s_instanceCount = 0;
 
-NVdecoder::NVdecoder(ConcurrentQueue<GPUFrame>& outputQueue)
+NVdecoder::NVdecoder(ConcurrentQueue<GPUFrame>& outputQueue): m_outputQueue(outputQueue)
 {
-	// location for output frames
-	m_outputQueue = outputQueue;
-
 	// intialize context state (don't worry about multiple GPUs yet)
 	if(false == s_lockInitialized)
 	{
