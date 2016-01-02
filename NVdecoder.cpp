@@ -126,11 +126,13 @@ NVdecoder::NVdecoder()
 
 NVdecoder::~NVdecoder()
 {
-	
+	// get rid of cuvid resources (starting to think the underlying library is in C++)
+	cuvidDestroyVideoParser(parserHandle);
+	cuvidDestroyDecoder(decoderHandle);
 }
 
 // int NVdecoder::decodeFrame(const CodedFrame& frame, CUvideopacketflags flags)
-int NVdecoder::decodeFrame(const CodedFrame& frame, CUvideopacketflags flags)
+GPUFrame NVdecoder::decodeFrame(const CodedFrame& frame, CUvideopacketflags flags)
 {
 	CUVIDSOURCEDATAPACKET sdp;
 

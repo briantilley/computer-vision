@@ -7,33 +7,37 @@ using namespace std;
 
 int main(void)
 {
+	// development
 	cout << "Let's go!" << endl;
-
-	unsigned captureWidth = 1920, captureHeight = 1080;
-	V4L2cam webcam(string("/dev/video0"), h264, captureWidth, captureHeight);
+	int framerate = 0;
 	CodedFrame frame;
-	NVdecoder gpuDecoder;
 	unsigned prev_timestamp = 0;
 
+	// camera
+	unsigned captureWidth = 1920, captureHeight = 1080;
+	V4L2cam webcam(string("/dev/video0"), h264, captureWidth, captureHeight);
+
+	// decoder
+	NVdecoder gpuDecoder;
+
+	// begin
 	webcam.streamOn();
 
-	for(int i = 0; i < 300; ++i)
+	for(int i = 0; i < 90; ++i) // 3 seconds
+	// for(int i = 0; true; ++i) // indefinite runtime
 	{
 		frame = webcam.retrieveCodedFrame();
 		gpuDecoder.decodeFrame(frame);
 
-		if(2 == i % 3)
-		{
-			cout << (int)(3000000 / (frame.timestamp() - prev_timestamp) + .5f) << " fps" << flush;
+		framerate = (int)(1000000 / (frame.timestamp() - prev_timestamp) + .5f);
+		cout << setw(2) << framerate;
+
+		prev_timestamp = frame.timestamp();
+
+		if(4 == i % 5)
 			cout << endl;
-
-			prev_timestamp = frame.timestamp();
-		}
-
-		// if(4 == i % 5)
-		// 	cout << endl;
-		// else
-		// 	cout << " " << flush;
+		else
+			cout << " " << flush;
 	}
 
 	return 0;

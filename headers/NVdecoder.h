@@ -59,7 +59,7 @@ public:
 	CUvideoparser CUparser() const { return parserHandle; }
 
 	// utilities
-	int decodeFrame(const CodedFrame& frame, CUvideopacketflags flags=static_cast<CUvideopacketflags>(0));
+	GPUFrame decodeFrame(const CodedFrame& frame, CUvideopacketflags flags=static_cast<CUvideopacketflags>(0));
 	void pushContext(void) { cuErr(cuCtxPushCurrent(context)); }
 	void popContext(void) { cuErr(cuCtxPopCurrent(nullptr)); }
 };
