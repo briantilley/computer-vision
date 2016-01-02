@@ -6,6 +6,7 @@
 #include <nvcuvid.h>
 #include "CodedFrame.h"
 #include "GPUFrame.h"
+#include "ConcurrentQueue.h"
 
 // development
 #include <iostream>
@@ -39,29 +40,37 @@ class NVdecoder
 private:
 
 	// callback functions will have to use pUserData to get back to these
-	CUvideodecoder decoderHandle = 0;
-	CUvideoparser parserHandle = 0;
+	CUvideodecoder m_decoderHandle = 0;
+	CUvideoparser m_parserHandle = 0;
 
-	// CUDA driver is state-based (ew)
-	CUcontext context;
+	// cuda driver is asynchronous with respect to decoding
+	// this handles all issues with threads and concurrency
+	ConcurrentQueue<GPUFrame>& m_outputQueue;
 
-	// static cuCtx;
+	// CUDA driver is littered with global state (ew)
+	// this allows NVdecoder instances across multiple threads
+	static CUvideoctxlock s_lock; // pass this to decoder objects
+	static bool s_lockInitialized;
+
+	// need to keep track for destruction of context lock
+	static int s_instanceCount;
 
 public:
 
-	NVdecoder();
+	NVdecoder(ConcurrentQueue<GPUFrame>& outputQueue);
 	~NVdecoder();
 
 	// access/mutation (technically breaks encapsulation, tsk tsk)
-	CUvideodecoder& CUdecoder() { return decoderHandle; }
+	CUvideodecoder& CUdecoder() { return m_decoderHandle; }
 
 	// access (mutation happens inside class)
-	CUvideoparser CUparser() const { return parserHandle; }
+	CUvideoparser CUparser() const { return m_parserHandle; }
+	CUvideoctxlock vidLock() const { return s_lock; }
 
 	// utilities
-	GPUFrame decodeFrame(const CodedFrame& frame, CUvideopacketflags flags=static_cast<CUvideopacketflags>(0));
-	void pushContext(void) { cuErr(cuCtxPushCurrent(context)); }
-	void popContext(void) { cuErr(cuCtxPopCurrent(nullptr)); }
+	int decodeFrame(const CodedFrame& frame, CUvideopacketflags flags=static_cast<CUvideopacketflags>(0));
+	void pushFrame(GPUFrame& toPush) { m_outputQueue.push(toPush); }
+	GPUFrame popFrame(void);
 };
 
 #endif

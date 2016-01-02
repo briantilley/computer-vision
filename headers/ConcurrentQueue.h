@@ -13,7 +13,7 @@
 #include <condition_variable>
 
 template <typename T>
-class Queue
+class ConcurrentQueue
 {
 public:
 
@@ -47,9 +47,9 @@ public:
 		mlock.unlock();
 		cond_.notify_one();
 	}
-	Queue()=default;
-	Queue(const Queue&) = delete;            // disable copying
-	Queue& operator=(const Queue&) = delete; // disable assignment
+	ConcurrentQueue()=default;
+	ConcurrentQueue(const ConcurrentQueue&) = delete;            // disable copying
+	ConcurrentQueue& operator=(const ConcurrentQueue&) = delete; // disable assignment
 	
 private:
 	std::queue<T> queue_;

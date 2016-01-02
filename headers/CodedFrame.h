@@ -9,7 +9,8 @@
  * persist after associated object is destroyed
  */
 
-#include <map>
+#include <memory>
+#include <cstring>
 
 // more explicit
 typedef uint8_t byte;
@@ -19,35 +20,51 @@ class CodedFrame
 {
 private:
 
-	// byte* data = nullptr;
-	std::map<const byte*, int>::iterator allocationIterator;
-	unsigned length = 0;
+	std::shared_ptr<byte> m_data;
+	unsigned m_length = 0;
 	unsigned m_timestamp = 0; // time value in microseconds (absolute value is arbitrary)
-
-	// track the number of instances associated with each byte array
-	static std::map<const byte*, int> allocations;
 
 public:
 
 	CodedFrame(void) { } // leave initialized as empty frame
 
 	// copy raw data and wrap in object
-	CodedFrame(const byte* _data, unsigned _length, float _timestamp);
+	CodedFrame(const byte* _data, unsigned _length, float _timestamp)
+	{
+		// make a copy
+		byte* newData = new byte[_length];
+		memcpy(static_cast<void*>(newData), static_cast<const void*>(_data), _length);
+
+		// 2nd arg gives proper way to delete arrays when data is gone for good
+		m_data = std::shared_ptr<byte>(newData, std::default_delete<byte[]>());
+		m_length = _length;
+		m_timestamp = _timestamp;
+	}
 	
 	// copy constructor (same behavior as above)
-	CodedFrame(const CodedFrame& toCopy);
+	CodedFrame(const CodedFrame& toCopy)
+	{
+		m_data = toCopy.m_data;
+		m_length = toCopy.m_length;
+		m_timestamp = toCopy.m_timestamp;
+	}
 
 	// copy assignment
-	void operator=(const CodedFrame& right);
+	void operator=(const CodedFrame& right)
+	{
+		m_data = right.m_data;
+		m_length = right.m_length;
+		m_timestamp = right.m_timestamp;
+	}
 	
 	// free copy of data
-	~CodedFrame();
+	~CodedFrame() = default;
 
 	// check if frame is empty (possible use: error signaling)
-	bool empty(void) const { return static_cast<bool>(length); }
+	bool empty(void) const { return static_cast<bool>(m_length); }
 
-	unsigned size(void) const { return length; } // size of allocation
-	const byte* raw_data(void) const { return allocationIterator->first; } // immutable information contained
+	unsigned size(void) const { return m_length; } // size of allocation
+	const byte* raw_data(void) const { return m_data.get(); } // immutable information contained
 	float timestamp(void) const { return m_timestamp; } // capture time of frame
 };
 
