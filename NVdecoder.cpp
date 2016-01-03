@@ -45,6 +45,10 @@ int sequence_callback(void *pUserData, CUVIDEOFORMAT* pVidFmt)
 		cuErr(cuvidCreateDecoder(&pInstance->CUdecoder(), &dci));
 	}
 
+	// fill width and height of decoder
+	pInstance->setVideoWidth(pVidFmt->display_area.right);
+	pInstance->setVideoHeight(pVidFmt->display_area.bottom);
+
 	// return value of 1 indicates success
 	return 1;
 }
@@ -71,14 +75,24 @@ int output_callback(void *pUserData, CUVIDPARSERDISPINFO* pParDispInfo)
 	// stitch C API and C++ together
 	NVdecoder* pInstance = reinterpret_cast<NVdecoder*>(pUserData);
 
+	// decoded frame info
+	CUdeviceptr devPtr = 0;
+	unsigned pitch = 0;
+	CUVIDPROCPARAMS trashParams;
+
+	// for the queue
+	GPUFrame outputFrame;
+
 	// make a GPUFrame object
 		// map output
-		// copy to cuda C/C++ accessible buffer
-		// unmap output
+	cuErr(cuvidMapVideoFrame(pInstance->CUdecoder(), pParDispInfo->picture_index, &devPtr, &pitch, &trashParams));
 		// construct GPUFrame
+	outputFrame = GPUFrame(devPtr, pitch, pInstance->videoWidth(), pInstance->videoHeight(), pParDispInfo->timestamp);
+		// unmap output
+	cuErr(cuvidUnmapVideoFrame(pInstance->CUdecoder(), devPtr));
 
 	// place into queue
-		// push()
+	pInstance->pushFrame(outputFrame);
 
 	return 0;
 }
@@ -156,7 +170,7 @@ int NVdecoder::decodeFrame(const CodedFrame& frame, CUvideopacketflags flags)
 {
 	CUVIDSOURCEDATAPACKET sdp;
 
-	sdp.flags        = flags;
+	sdp.flags        = flags; // end of stream, valid timestamp, discontinuity
 	sdp.payload_size = frame.size();
 	sdp.payload      = frame.raw_data();
 	sdp.timestamp    = frame.timestamp();

@@ -30,7 +30,8 @@ int main(void)
 	// for(int i = 0; true; ++i) // indefinite runtime
 	{
 		frame = webcam.retrieveCodedFrame();
-		gpuDecoder.decodeFrame(frame);
+		// tell the decoder timestamp is valid
+		gpuDecoder.decodeFrame(frame, CUVID_PKT_TIMESTAMP);
 
 		framerate = (int)(1000000 / (frame.timestamp() - prev_timestamp) + .5f);
 		cout << setw(2) << framerate;

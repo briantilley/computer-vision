@@ -11,7 +11,7 @@ CPP_OPTS=-std=gnu++11
 CUDA_OPTS=-std=c++11
 
 # libraries
-LINKS=-lnvcuvid -lcuda
+LINKS=-lnvcuvid -lcuda -lcudart
 
 all: host video decode
 	$(CUDA) *.o -o $(EXE) $(CUDA_OPTS) $(LINKS)
@@ -22,9 +22,8 @@ host: host.cpp
 video: V4L2cam.cpp
 	$(CPP) V4L2cam.cpp -c $(CPP_OPTS)
 
-decode: NVdecoder.cpp GPUFrame.cpp
+decode: NVdecoder.cpp
 	$(CPP) NVdecoder.cpp -c $(CPP_OPTS)
-	$(CPP) GPUFrame.cpp -c $(CPP_OPTS)
 
 clean:
 	rm -rf *.o $(EXE) $(DBG)

@@ -165,7 +165,7 @@ CodedFrame V4L2cam::retrieveCodedFrame(void)
 {
 	// returned by this function
 	CodedFrame returnFrame;
-	float timestamp;
+	unsigned timestamp;
 
 	// pull frame buffer out of v4l2's queue
 	if(-1 == xioctl(fileDescriptor, VIDIOC_DQBUF, &workingBuffer))

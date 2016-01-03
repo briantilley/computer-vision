@@ -42,6 +42,7 @@ private:
 	// callback functions will have to use pUserData to get back to these
 	CUvideodecoder m_decoderHandle = 0;
 	CUvideoparser m_parserHandle = 0;
+	unsigned m_width = 0, m_height = 0; // dimensions of the video stream
 
 	// cuda driver is asynchronous with respect to decoding
 	// this handles all issues with threads and concurrency
@@ -61,16 +62,21 @@ public:
 	~NVdecoder();
 
 	// access/mutation (technically breaks encapsulation, tsk tsk)
-	CUvideodecoder& CUdecoder() { return m_decoderHandle; }
+	CUvideodecoder& CUdecoder(void) { return m_decoderHandle; }
 
 	// access (mutation happens inside class)
-	CUvideoparser CUparser() const { return m_parserHandle; }
-	CUvideoctxlock vidLock() const { return s_lock; }
+	CUvideoparser CUparser(void) const { return m_parserHandle; }
+	CUvideoctxlock vidLock(void) const { return s_lock; }
+	unsigned videoWidth(void) const { return m_width; }
+	unsigned videoHeight(void) const { return m_height; }
+
+	// mutation
+	void setVideoWidth(unsigned width) { m_width = width; }
+	void setVideoHeight(unsigned height) { m_height = height; }
 
 	// utilities
 	int decodeFrame(const CodedFrame& frame, CUvideopacketflags flags=static_cast<CUvideopacketflags>(0));
-	void pushFrame(GPUFrame& toPush) { m_outputQueue.push(toPush); }
-	GPUFrame popFrame(void);
+	void pushFrame(GPUFrame& toPush) { m_outputQueue.push(toPush); } // not for use outside NVdecoder
 };
 
 #endif

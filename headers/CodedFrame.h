@@ -29,7 +29,7 @@ public:
 	CodedFrame(void) { } // leave initialized as empty frame
 
 	// copy raw data and wrap in object
-	CodedFrame(const byte* _data, unsigned _length, float _timestamp)
+	CodedFrame(const byte* _data, unsigned _length, unsigned _timestamp)
 	{
 		// make a copy
 		byte* newData = new byte[_length];
@@ -65,7 +65,7 @@ public:
 
 	unsigned size(void) const { return m_length; } // size of allocation
 	const byte* raw_data(void) const { return m_data.get(); } // immutable information contained
-	float timestamp(void) const { return m_timestamp; } // capture time of frame
+	unsigned timestamp(void) const { return m_timestamp; } // capture time of frame
 };
 
 #endif
