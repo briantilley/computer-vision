@@ -11,3 +11,6 @@ video pipeline:
 threads:
 	input/decode, post-processing (maybe >1), display
 	use 2 ConcurrentQueue objects between the three threads
+
+todo:
+	make V4L2cam thread-safe - sucks that control has to serialize with input

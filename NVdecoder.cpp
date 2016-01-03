@@ -91,10 +91,13 @@ int output_callback(void *pUserData, CUVIDPARSERDISPINFO* pParDispInfo)
 		// unmap output
 	cuErr(cuvidUnmapVideoFrame(pInstance->CUdecoder(), devPtr));
 
+	std::cout << "[output_callback] width: " << pInstance->videoWidth() << " height: " << pInstance->videoHeight() << std::endl;
+
 	// place into queue
 	pInstance->pushFrame(outputFrame);
 
-	return 0;
+	// return value of 1 indicates success
+	return 1;
 }
 
 // static member variables

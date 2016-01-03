@@ -1,6 +1,10 @@
 #ifndef V4L2_CAM_H
 #define V4L2_CAM_H
 
+// thread safety
+#include <thread>
+#include <mutex>
+
 // V4L2 includes
 #include <linux/videodev2.h>
 #include <errno.h>
@@ -26,6 +30,10 @@ class V4L2cam
 {
 private:
 
+	// signal valid input object w/ implicit conversion
+	bool m_isValid = false;
+	std::mutex m_cameraMutex;
+
 	// only V4L2 needs this type
 	typedef struct _frameBuffer
 	{
@@ -38,6 +46,9 @@ private:
 	struct v4l2_buffer workingBuffer; // let this track index in v4l2's queue
 	frameBuffer* buffers;
 	unsigned bufferCount;
+
+	// signal to any threads that the stream is off
+	bool m_isOn;
 
 	// wrapper for ioctl function
 	// only this class needs access
@@ -61,9 +72,14 @@ public:
 	~V4L2cam();
 
 	// accessors
-	int getWidth(void) { return videoWidth; }
-	int getHeight(void) { return videoHeight; }
+	int getWidth(void) const { return videoWidth; }
+	int getHeight(void) const { return videoHeight; }
 	float getExposure(void); // return exposure value in seconds
+	bool isOn(void) const { return m_isOn; }
+	
+	// indicate good stream
+	operator bool() const { return m_isValid; } // implicit conversion
+	bool good() const { return m_isValid; }
 
 	// mutators
 	int streamOn(void); // start v4l2 stream

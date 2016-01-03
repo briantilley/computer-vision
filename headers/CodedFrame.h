@@ -61,7 +61,7 @@ public:
 	~CodedFrame() = default;
 
 	// check if frame is empty (possible use: error signaling)
-	bool empty(void) const { return static_cast<bool>(m_length); }
+	bool empty(void) const { return !static_cast<bool>(m_length); }
 
 	unsigned size(void) const { return m_length; } // size of allocation
 	const byte* raw_data(void) const { return m_data.get(); } // immutable information contained

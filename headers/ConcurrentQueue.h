@@ -47,6 +47,17 @@ public:
 		mlock.unlock();
 		cond_.notify_one();
 	}
+
+	// Brian Tilley briantilley97@gmail.com github.com/briantilley
+	bool empty()
+	{
+		bool returnState;
+		std::unique_lock<std::mutex> mlock(mutex_);
+		returnState = queue_.empty();
+		mlock.unlock();
+		return returnState;
+	}
+
 	ConcurrentQueue()=default;
 	ConcurrentQueue(const ConcurrentQueue&) = delete;            // disable copying
 	ConcurrentQueue& operator=(const ConcurrentQueue&) = delete; // disable assignment

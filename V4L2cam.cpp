@@ -5,6 +5,9 @@
 // specifying number of buffers is optional
 V4L2cam::V4L2cam(std::string device, dataFormat format, unsigned& width, unsigned& height, unsigned _bufferCount)
 {
+	// keep the instance locked until creation finished
+	std::unique_lock<std::mutex> mlock(m_cameraMutex);
+
 	// member variables
 	bufferCount = (0 != _bufferCount) ? _bufferCount : DEFAULT_BUFFER_COUNT;
 
@@ -19,14 +22,16 @@ V4L2cam::V4L2cam(std::string device, dataFormat format, unsigned& width, unsigne
 	if(-1 == fileDescriptor)
 	{
 		std::cerr << "failed to open " << device << std::endl;
-		exit(1);
+		m_isValid = false;
+		return;
 	}
 
 	// query capabilites (suggested by V4L2)
 	if(-1 == xioctl(fileDescriptor, VIDIOC_QUERYCAP, &device_caps))
 	{
 		std::cerr << "error while querying caps" << std::endl;
-		exit(1);
+		m_isValid = false;
+		return;
 	}
 
 	formatStruct.type                  = V4L2_BUF_TYPE_VIDEO_CAPTURE;
@@ -39,7 +44,8 @@ V4L2cam::V4L2cam(std::string device, dataFormat format, unsigned& width, unsigne
 	if(-1 == xioctl(fileDescriptor, VIDIOC_S_FMT, &formatStruct))
 	{
 		std::cerr << "error while setting format" << std::endl;
-		exit(1);
+		m_isValid = false;
+		return;
 	}
 
 	// get and return the actual width and height
@@ -59,7 +65,8 @@ V4L2cam::V4L2cam(std::string device, dataFormat format, unsigned& width, unsigne
 	if(-1 == xioctl(fileDescriptor, VIDIOC_S_EXT_CTRLS, &ext_ctrls))
 	{
 		std::cerr << "error while setting controls" << std::endl;
-		exit(1);
+		m_isValid = false;
+		return;
 	}
 
 	delete [] ext_ctrls.controls;
@@ -72,7 +79,8 @@ V4L2cam::V4L2cam(std::string device, dataFormat format, unsigned& width, unsigne
 	if(-1 == xioctl(fileDescriptor, VIDIOC_REQBUFS, &request_bufs))
 	{
 		std::cerr << "error while requesting buffers" << std::endl;
-		exit(1);
+		m_isValid = false;
+		return;
 	}
 
 	// get the actual number of buffers
@@ -91,7 +99,8 @@ V4L2cam::V4L2cam(std::string device, dataFormat format, unsigned& width, unsigne
 		if(-1 == xioctl(fileDescriptor, VIDIOC_QUERYBUF, &workingBuffer))
 		{
 			std::cerr << "error while querying buffer" << std::endl;
-			exit(1);
+			m_isValid = false;
+			return;
 		}
 
 		buffers[i].start = (byte*)mmap(NULL, workingBuffer.length, PROT_READ | PROT_WRITE, MAP_SHARED, fileDescriptor, workingBuffer.m.offset);
@@ -100,15 +109,20 @@ V4L2cam::V4L2cam(std::string device, dataFormat format, unsigned& width, unsigne
 		if(MAP_FAILED == buffers[i].start)
 		{
 			std::cerr << "error mapping buffers " << std::endl;
-			exit(1);
+			m_isValid = false;
+			return;
 		}
 
 		if(-1 == xioctl(fileDescriptor, VIDIOC_QBUF, &workingBuffer))
 		{
 			std::cerr << "error while initial enqueuing" << std::endl;
-			exit(1);
+			m_isValid = false;
+			return;
 		}
 	}
+
+	// only now is the camera object valid
+	m_isValid = true;
 }
 
 V4L2cam::~V4L2cam()
@@ -122,17 +136,26 @@ V4L2cam::~V4L2cam()
 
 float V4L2cam::getExposure(void)
 {
+	// make other operations wait
+	std::unique_lock<std::mutex> mlock(m_cameraMutex);
+
 	return 0.f;
 }
 
 // webcam on
 int V4L2cam::streamOn(void)
 {
+	// make other operations wait
+	std::unique_lock<std::mutex> mlock(m_cameraMutex);
+
 	if(-1 == xioctl(fileDescriptor, VIDIOC_STREAMON, &workingBuffer.type))
 	{
 		std::cerr << "error while turning stream on" << std::endl;
 		return 1;
 	}
+
+	// camera is on
+	m_isOn = true;
 
 	workingBuffer.index = 0;
 	return 0;
@@ -141,22 +164,34 @@ int V4L2cam::streamOn(void)
 // webcam off
 int V4L2cam::streamOff(void)
 {
+	// make other operations wait
+	std::unique_lock<std::mutex> mlock(m_cameraMutex);
+
 	if(-1 == xioctl(fileDescriptor, VIDIOC_STREAMOFF, &workingBuffer.type))
 	{
 		std::cerr << "error while turning stream off" << std::endl;
 		return 1;
 	}
 
+	// camera is off
+	m_isOn = false;
+
 	return 0;
 }
 
 int V4L2cam::setExposure(float exposure)
 {
+	// make other operations wait
+	std::unique_lock<std::mutex> mlock(m_cameraMutex);
+
 	return 1;
 }
 
 int V4L2cam::changeExposure(bool increase, float deltaExposure)
 {
+	// make other operations wait
+	std::unique_lock<std::mutex> mlock(m_cameraMutex);
+
 	return 1;
 }
 
@@ -167,23 +202,43 @@ CodedFrame V4L2cam::retrieveCodedFrame(void)
 	CodedFrame returnFrame;
 	unsigned timestamp;
 
+	// make other operations wait
+	std::unique_lock<std::mutex> mlock(m_cameraMutex);
+
+	// if stream is off
+	if(!isOn())
+	{
+		// give back an empty frame
+		return CodedFrame();
+	}
+
 	// pull frame buffer out of v4l2's queue
 	if(-1 == xioctl(fileDescriptor, VIDIOC_DQBUF, &workingBuffer))
 	{
 		std::cerr << "error while retrieving frame" << std::endl;
-		exit(1);
+		m_isValid = false;
+		streamOff();
+		return CodedFrame();
 	}
+
+	// let other work happen during copy insided 'CodedFrame' ctor
+	// mlock.unlock();
 
 	// create a copy of the data to return
 	timestamp = workingBuffer.timestamp.tv_sec * 1000000;
 	timestamp += workingBuffer.timestamp.tv_usec;
 	returnFrame = CodedFrame(buffers[workingBuffer.index].start, workingBuffer.bytesused, timestamp);
 
+	// re-lock for V4L2 access (unlocks on return)
+	// mlock.lock();
+
 	// re-queue the buffer for v4l2
 	if(-1 == xioctl(fileDescriptor, VIDIOC_QBUF, &workingBuffer))
 	{
 		std::cerr << "error while releasing buffer" << std::endl;
-		exit(1);
+		m_isValid = false;
+		streamOff();
+		return CodedFrame();
 	}
 
 	// move forward in the queue
