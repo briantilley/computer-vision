@@ -29,7 +29,7 @@ inline void cuError(CUresult err, const char file[], unsigned line, bool abort=t
 #define DEFAULT_DECODE_SURFACES 8 // number of buffers to use while decoding
 #define DEFAULT_CLOCK_RATE 0 // not sure what effect this has
 #define DEFAULT_ERROR_THRESHOLD 10 // % corruption allowed in output stream
-#define DEFAULT_DECODE_GAP 1 // number of frames between decode and mapping for output
+#define DEFAULT_DECODE_GAP 10 // number of frames between decode and mapping for output
 #define DEFAULT_OUTPUT_SURFACES 8 // number of output buffers
 
 // more explicit
@@ -48,6 +48,9 @@ private:
 	// this handles all issues with threads and concurrency
 	ConcurrentQueue<GPUFrame>& m_outputQueue;
 
+	// keep track of frames left in NVIDIA-managed queue
+	int m_currentDecodeGap = 0;
+
 	// CUDA driver is littered with global state (ew)
 	// this allows NVdecoder instances across multiple threads
 	static CUvideoctxlock s_lock; // pass this to decoder objects
@@ -61,22 +64,28 @@ public:
 	NVdecoder(ConcurrentQueue<GPUFrame>& outputQueue);
 	~NVdecoder();
 
-	// access/mutation (technically breaks encapsulation, tsk tsk)
-	CUvideodecoder& CUdecoder(void) { return m_decoderHandle; }
-
 	// access (mutation happens inside class)
+	CUvideodecoder CUdecoder(void) { return m_decoderHandle; }
 	CUvideoparser CUparser(void) const { return m_parserHandle; }
 	CUvideoctxlock vidLock(void) const { return s_lock; }
 	unsigned videoWidth(void) const { return m_width; }
 	unsigned videoHeight(void) const { return m_height; }
+	bool empty() const { return m_currentDecodeGap <= 0; }
+	int decodeGap() const { return m_currentDecodeGap; }
 
-	// mutation
+	// mutation (not for use outside NVdecoder)
+	void setCUdecoder(CUvideodecoder decoder) { m_decoderHandle = decoder; }
 	void setVideoWidth(unsigned width) { m_width = width; }
 	void setVideoHeight(unsigned height) { m_height = height; }
 
 	// utilities
 	int decodeFrame(const CodedFrame& frame, CUvideopacketflags flags=static_cast<CUvideopacketflags>(0));
-	void pushFrame(GPUFrame& toPush) { m_outputQueue.push(toPush); } // not for use outside NVdecoder
+	void pushFrame(GPUFrame& toPush) // not for use outside NVdecoder
+	{
+		m_currentDecodeGap--;
+		m_outputQueue.push(toPush);
+	}
+	void signalEndOfStream(void) { decodeFrame(CodedFrame(), CUVID_PKT_ENDOFSTREAM); }
 };
 
 #endif

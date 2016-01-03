@@ -222,7 +222,7 @@ CodedFrame V4L2cam::retrieveCodedFrame(void)
 	}
 
 	// let other work happen during copy insided 'CodedFrame' ctor
-	// mlock.unlock();
+	mlock.unlock();
 
 	// create a copy of the data to return
 	timestamp = workingBuffer.timestamp.tv_sec * 1000000;
@@ -230,7 +230,7 @@ CodedFrame V4L2cam::retrieveCodedFrame(void)
 	returnFrame = CodedFrame(buffers[workingBuffer.index].start, workingBuffer.bytesused, timestamp);
 
 	// re-lock for V4L2 access (unlocks on return)
-	// mlock.lock();
+	mlock.lock();
 
 	// re-queue the buffer for v4l2
 	if(-1 == xioctl(fileDescriptor, VIDIOC_QBUF, &workingBuffer))

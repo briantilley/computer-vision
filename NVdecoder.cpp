@@ -42,7 +42,9 @@ int sequence_callback(void *pUserData, CUVIDEOFORMAT* pVidFmt)
 		memset(dci.Reserved2, 0, sizeof(dci.Reserved2));
 
 		// create the decoder
-		cuErr(cuvidCreateDecoder(&pInstance->CUdecoder(), &dci));
+		CUvideodecoder tempDecoder;
+		cuErr(cuvidCreateDecoder(&tempDecoder, &dci));
+		pInstance->setCUdecoder(tempDecoder);
 	}
 
 	// fill width and height of decoder
@@ -91,10 +93,10 @@ int output_callback(void *pUserData, CUVIDPARSERDISPINFO* pParDispInfo)
 		// unmap output
 	cuErr(cuvidUnmapVideoFrame(pInstance->CUdecoder(), devPtr));
 
-	std::cout << "[output_callback] width: " << pInstance->videoWidth() << " height: " << pInstance->videoHeight() << std::endl;
-
 	// place into queue
 	pInstance->pushFrame(outputFrame);
+
+	std::cout << "frame pushed" << std::endl;
 
 	// return value of 1 indicates success
 	return 1;
@@ -181,6 +183,9 @@ int NVdecoder::decodeFrame(const CodedFrame& frame, CUvideopacketflags flags)
 	// parse coded frame and launch sequence, decode, and output
 	// callbacks as necessary
 	cuErr(cuvidParseVideoData(CUparser(), &sdp));
+
+	if(!(flags & CUVID_PKT_ENDOFSTREAM))
+		m_currentDecodeGap++;
 
 	return 0;
 }

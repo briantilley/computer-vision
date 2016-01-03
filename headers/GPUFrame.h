@@ -70,7 +70,7 @@ public:
 	~GPUFrame() = default;
 
 	// check if frame is empty (possible use: error signaling)
-	bool empty() const { return !static_cast<bool>(m_width) || !static_cast<bool>(m_height); }
+	bool empty() const { return !(static_cast<bool>(m_width) && static_cast<bool>(m_height)); }
 
 	void* data() const { m_deviceData.get(); }; // pointer this is wrapped around
 	unsigned timestamp() const { return	m_timestamp; }; // capture time of frame
