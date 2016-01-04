@@ -12,22 +12,24 @@
 
 // error checking for cuda runtime calls
 #define cudaErr(err) cudaError(err, __FILE__, __LINE__)
-inline void cudaError(cudaError_t err, const char file[], uint32_t line, bool abort=true)
+inline void cudaError(cudaError_t err, const char file[], uint32_t line)
 {
 	if(cudaSuccess != err)
 	{
 		std::cerr << "[" << file << ":" << line << "] ";
 		std::cerr << cudaGetErrorName(err) << std::endl;
-		if(abort) exit(err);
+		exit(err);
 	}
 }
 
-// no exceptional behavior
-inline void cudaError(cudaError_t err)
+// same as above without exceptional behavior
+#define cudaErrNE(err) cudaErrorNE(err, __FILE__, __LINE__)
+inline void cudaErrorNE(cudaError_t err, const char file[], uint32_t line)
 {
 	if(cudaSuccess != err)
 	{
-		std::cerr << __FILE__ << ": " << cudaGetErrorName(err) << std::endl;
+		std::cerr << "[" << file << ":" << line << "] ";
+		std::cerr << cudaGetErrorName(err) << std::endl;
 	}
 }
 
@@ -38,51 +40,76 @@ private:
 
 	std::shared_ptr<void> m_deviceData;
 	unsigned m_pitch = 0;
-	unsigned m_width = 0;
+	unsigned m_width = 2;
 	unsigned m_height = 0;
 	unsigned m_timestamp = 0; // time value in microseconds (absolute value is arbitrary)
+	bool m_endOfStream = false; // signifies last frame in the stream
 
 public:
 
-	GPUFrame() = default; // let everything remain in the empty state
-
-	GPUFrame(CUdeviceptr devPtr, unsigned pitch, unsigned width, unsigned height, unsigned timestamp): m_width(width), m_height(height), m_timestamp(timestamp)
+	// helper class to signal end of stream
+	class EOS
 	{
-		// copy into a more permanent chunk of memory
-		void* devPtr_copy;
-		cudaErr(cudaMallocPitch(&devPtr_copy, reinterpret_cast<size_t*>(&m_pitch), static_cast<size_t>(width), static_cast<size_t>(height)));
-		cudaErr(cudaMemcpy2D(devPtr_copy, m_pitch, reinterpret_cast<void*>(devPtr), pitch,
-							width, height, cudaMemcpyDeviceToDevice));
+	public:
+		EOS() = default;
+		~EOS() = default;
+	};
 
-		// update the shared pointer (uses a lambda to call cudaFree)
-		m_deviceData = std::shared_ptr<void>(devPtr_copy, [=](void* p){ cudaError(cudaFree(p)); });
+	GPUFrame() = default; // let all members remain in the empty state
+
+	// make an entirely new allocation
+	GPUFrame(unsigned imageWidth, unsigned imageHeight, unsigned allocationCols, unsigned allocationRows,
+			 unsigned timestamp, bool eos=false)
+	{
+		// initializer list was causing headaches
+		m_pitch = 0;
+		m_width = imageWidth;
+		m_height = imageHeight;
+		m_timestamp = timestamp;
+		m_endOfStream = eos;
+
+		// get space from CUDA
+		void* newAllocation;
+		cudaErr(cudaMallocPitch(&newAllocation, reinterpret_cast<size_t*>(&m_pitch), static_cast<size_t>(allocationCols), static_cast<size_t>(allocationRows)));
+
+		// track allocation with the shared_ptr
+		m_deviceData = std::shared_ptr<void>(newAllocation, [=](void* p){ cudaErrNE(cudaFree(p)); });
+
+		std::cout << "imageWidth = " << imageWidth << ", m_width = " << m_width << std::endl;
 	}
 
-	GPUFrame(const GPUFrame& toCopy)
+	// copy from given location
+	GPUFrame(CUdeviceptr devPtr, unsigned pitch,
+			 unsigned imageWidth, unsigned imageHeight, unsigned allocationCols, unsigned allocationRows,
+			 unsigned timestamp, bool eos=false): GPUFrame(imageWidth, imageHeight, allocationCols, allocationRows, timestamp)
 	{
-		m_deviceData = toCopy.m_deviceData;
-		m_pitch = toCopy.m_pitch;
-		m_width = toCopy.m_width;
-		m_height = toCopy.m_height;
-		m_timestamp = toCopy.m_timestamp;
+		// copy into a more permanent chunk of memory allocated by above ctor
+		cudaErr(cudaMemcpy2D(data(), m_pitch, reinterpret_cast<void*>(devPtr), pitch,
+							allocationCols, allocationRows, cudaMemcpyDeviceToDevice));
 	}
 
-	void operator=(const GPUFrame& right)
+	GPUFrame(EOS eos)
 	{
-		m_deviceData = right.m_deviceData;
-		m_pitch = right.m_pitch;
-		m_width = right.m_width;
-		m_height = right.m_height;
-		m_timestamp = right.m_timestamp;
+		m_endOfStream = true;
 	}
+
+	// let C++ copy all member data
+	GPUFrame(const GPUFrame&) = default;
+	GPUFrame& operator=(const GPUFrame&) = default;
 
 	~GPUFrame() = default;
 
 	// check if frame is empty (possible use: error signaling)
-	bool empty() const { return !(static_cast<bool>(m_width) && static_cast<bool>(m_height)); }
+	bool empty(void) const { return !(static_cast<bool>(m_width) && static_cast<bool>(m_height)); }
 
-	void* data() const { m_deviceData.get(); }; // pointer this is wrapped around
-	unsigned timestamp() const { return	m_timestamp; }; // capture time of frame
+	// check if this is the last frame to be recieved
+	bool eos(void) const { return m_endOfStream; }
+
+	void* data(void) { return m_deviceData.get(); }; // pointer this is wrapped around
+	unsigned pitch(void) const { return m_pitch; } // number of bytes between the start of one row and the next
+	unsigned width(void) const { return m_width; } // dimensions (in pixels) of the image
+	unsigned height(void) const { return m_height; } // ^
+	unsigned timestamp(void) const { return	m_timestamp; }; // capture time of frame
 };
 
 #endif

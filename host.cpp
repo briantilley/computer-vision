@@ -3,6 +3,7 @@
 #include <thread>
 #include "headers/V4L2cam.h"
 #include "headers/NVdecoder.h"
+#include "headers/device.h"
 
 #include <unistd.h>
 
@@ -26,19 +27,46 @@ void threadInputDecode(V4L2cam& webcam, NVdecoder& decoder)
 		// passed when constructing 'decoder'
 		if(!inputFrame.empty())
 		{
+			cout << "." << flush;
 			decoder.decodeFrame(inputFrame);
 		}
 	}
+	cout << endl;
 
 	// if webcam is off, stream is over
 	// and decoding buffer needs to be flushed
+	// (also pushes end of stream frame to output queue)
 	decoder.signalEndOfStream();
 }
 
 // takes decoded input from the queue and decodes with CUDA functions
-void threadPostProcess(ConcurrentQueue<GPUFrame> inputQueue)
+void threadPostProcess(ConcurrentQueue<GPUFrame>& inputQueue)
 {
+	// frame popped from queue
+	GPUFrame NV12input;
 
+	while(true) // break upon receiving end of stream frame
+	{
+		// thread-safe input from decoder
+		inputQueue.pop(NV12input);
+
+		if(!NV12input.eos()) // if stream isn't finished
+		{
+			// convert the frame and let it go to waste
+			if(!NV12input.empty())
+			{
+				cout << "p" << flush;
+				NV12toRGB(NV12input);
+			}
+			else
+				cout << "e" << flush;
+		}
+		else
+		{
+			break;
+		}
+	}
+	cout << endl;
 }
 
 int main(void)
@@ -57,7 +85,7 @@ int main(void)
 	int frameCount = 0;
 
 	// input/decode thread
-	std::thread inputDecodeThread;
+	std::thread inputDecodeThread, postProcessThread;
 
 	// camera
 	unsigned captureWidth = 1920, captureHeight = 1080;
@@ -75,16 +103,22 @@ int main(void)
 	// hand input/decode over to a new thread
 	inputDecodeThread = std::thread(threadInputDecode, std::ref(webcam), std::ref(gpuDecoder));
 
-	for(; frameCount < 90; ++frameCount) // 1 second
-	// for(int i = 0; true; ++i) // indefinite runtime
+	// // start the post-processing thread
+	// postProcessThread = std::thread(threadPostProcess, std::ref(decodedQueue));
+
+	// sleep(2);
+
+	for(; frameCount < 10; ++frameCount)
+	// for(; true; ++frameCount)
 	{
 		// thread-safe way to get frame from queue
 		decodedQueue.pop(decodedFrame);
 
 		// framerate business
-		framerate = 1000000.f / (decodedFrame.timestamp() - prev_timestamp);
-		framerateAccumulator += framerate;
-		prev_timestamp = decodedFrame.timestamp();
+		// framerate = 1000000.f / (decodedFrame.timestamp() - prev_timestamp);
+		// cout << static_cast<int>(framerate) << " " << flush;
+		// framerateAccumulator += framerate;
+		// prev_timestamp = decodedFrame.timestamp();
 	}
 
 	// this breaks 'threadInputDecode' from loop
@@ -92,6 +126,7 @@ int main(void)
 
 	// wait for all threads to finish
 	inputDecodeThread.join();
+	// postProcessThread.join();
 
 	for(; !(gpuDecoder.empty() && decodedQueue.empty()); ++frameCount) // pop frames until both are empty
 	{
@@ -99,13 +134,14 @@ int main(void)
 		decodedQueue.pop(decodedFrame);
 
 		// framerate business
-		framerate = 1000000.f / (decodedFrame.timestamp() - prev_timestamp);
-		framerateAccumulator += framerate;
-		prev_timestamp = decodedFrame.timestamp();
+		// framerate = 1000000.f / (decodedFrame.timestamp() - prev_timestamp);
+		// cout << static_cast<int>(framerate) << " " << flush;
+		// framerateAccumulator += framerate;
+		// prev_timestamp = decodedFrame.timestamp();
 	}
 
 	cout << frameCount << " frames" << endl;
-	cout << "average framerate: " << framerateAccumulator / frameCount << " fps" << endl;
+	// cout << "average framerate: " << framerateAccumulator / frameCount << " fps" << endl;
 
 	return 0;
 }

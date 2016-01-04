@@ -91,7 +91,8 @@ int output_callback(void *pUserData, CUVIDPARSERDISPINFO* pParDispInfo)
 		// map output
 	cuErr(cuvidMapVideoFrame(pInstance->CUdecoder(), pParDispInfo->picture_index, &devPtr, &pitch, &trashParams));
 		// construct GPUFrame
-	outputFrame = GPUFrame(devPtr, pitch, pInstance->videoWidth(), pInstance->videoHeight(), pParDispInfo->timestamp);
+		// height multiplier has to do with NV12 format
+	outputFrame = GPUFrame(devPtr, pitch, pInstance->videoWidth(), pInstance->videoHeight(), pInstance->videoWidth(), (pInstance->videoHeight() * 3 / 2), pParDispInfo->timestamp);
 		// unmap output
 	cuErr(cuvidUnmapVideoFrame(pInstance->CUdecoder(), devPtr));
 
@@ -199,5 +200,9 @@ void NVdecoder::signalEndOfStream(void)
 	sdp.payload = nullptr;
 	sdp.timestamp = 0;
 
+	// tell cuvid stream is done
 	cuErr(cuvidParseVideoData(m_parserHandle, &sdp));
+
+	// tell all output queue consumer stream is done
+	m_outputQueue.push(GPUFrame(GPUFrame::EOS()));
 }
