@@ -9,15 +9,14 @@
 using namespace std;
 
 // cuda stuff
-#include <cuda_profiler_api.h>
+// #include <cuda_profiler_api.h>
 
 void threadInputDecode(V4L2cam& webcam, NVdecoder& decoder)
 {
 	// frame from V4L2
 	CodedFrame inputFrame;
 
-	int i;
-	for(i = 0; webcam.isOn(); ++i)
+	while(webcam.isOn())
 	{
 		// V4L2 blocks until frame comes in
 		inputFrame = webcam.retrieveCodedFrame();
@@ -27,11 +26,13 @@ void threadInputDecode(V4L2cam& webcam, NVdecoder& decoder)
 		// passed when constructing 'decoder'
 		if(!inputFrame.empty())
 		{
-			decoder.decodeFrame(inputFrame, CUVID_PKT_TIMESTAMP);
+			decoder.decodeFrame(inputFrame);
 		}
 	}
 
-	cout << i << " frames retrieved" << endl;
+	// if webcam is off, stream is over
+	// and decoding buffer needs to be flushed
+	decoder.signalEndOfStream();
 }
 
 // takes decoded input from the queue and decodes with CUDA functions
@@ -44,12 +45,15 @@ int main(void)
 {
 	cout << "Let's go!" << endl;
 	cout << std::thread::hardware_concurrency() << " concurrent threads supported" << endl;
+	cout << endl;
 
 	// development
 	GPUFrame decodedFrame;
-	int framerate = 0;
+
+	// metrics
+	float framerate = 0;
 	unsigned prev_timestamp = 0;
-	int framerateAccumulator = 0;
+	float framerateAccumulator = 0;
 	int frameCount = 0;
 
 	// input/decode thread
@@ -68,27 +72,19 @@ int main(void)
 	// begin
 	webcam.streamOn();
 
+	// hand input/decode over to a new thread
 	inputDecodeThread = std::thread(threadInputDecode, std::ref(webcam), std::ref(gpuDecoder));
 
-	// sleep(1);
-
-	for(int i = 0; i < 30; ++i) // 1 second
+	for(; frameCount < 90; ++frameCount) // 1 second
 	// for(int i = 0; true; ++i) // indefinite runtime
 	{
 		// thread-safe way to get frame from queue
 		decodedQueue.pop(decodedFrame);
 
-		framerate = (int)(1000000 / (decodedFrame.timestamp() - prev_timestamp) + .5f);
+		// framerate business
+		framerate = 1000000.f / (decodedFrame.timestamp() - prev_timestamp);
 		framerateAccumulator += framerate;
-		frameCount++;
-		cout << setw(2) << framerate << "-" << gpuDecoder.decodeGap();
-
 		prev_timestamp = decodedFrame.timestamp();
-
-		if(4 == i % 5)
-			cout << endl;
-		else
-			cout << " " << flush;
 	}
 
 	// this breaks 'threadInputDecode' from loop
@@ -97,33 +93,19 @@ int main(void)
 	// wait for all threads to finish
 	inputDecodeThread.join();
 
-	// gpuDecoder.signalEndOfStream();
-
-	cout << "remaining frames" << endl;
-	int i;
-	for(i = 0; !gpuDecoder.empty(); ++i)
+	for(; !(gpuDecoder.empty() && decodedQueue.empty()); ++frameCount) // pop frames until both are empty
 	{
 		// thread-safe way to get frame from queue
-		cout << "decode gap: " << gpuDecoder.decodeGap() << endl;
 		decodedQueue.pop(decodedFrame);
 
-		framerate = (int)(1000000 / (decodedFrame.timestamp() - prev_timestamp) + .5f);
+		// framerate business
+		framerate = 1000000.f / (decodedFrame.timestamp() - prev_timestamp);
 		framerateAccumulator += framerate;
-		frameCount++;
-		cout << setw(2) << framerate << "-" << gpuDecoder.decodeGap();
-
 		prev_timestamp = decodedFrame.timestamp();
-
-		if(4 == i % 5)
-			cout << endl;
-		else
-			cout << " " << flush;
 	}
-	if(4 != i % 5) cout << endl;
 
-	cout << "average framerate: " << framerateAccumulator / frameCount << endl;
-
-	cudaProfilerStop();
+	cout << frameCount << " frames" << endl;
+	cout << "average framerate: " << framerateAccumulator / frameCount << " fps" << endl;
 
 	return 0;
 }

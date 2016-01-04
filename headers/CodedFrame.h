@@ -12,6 +12,9 @@
 #include <memory>
 #include <cstring>
 
+// development
+#include <iostream>
+
 // more explicit
 typedef uint8_t byte;
 
@@ -35,8 +38,8 @@ public:
 		byte* newData = new byte[_length];
 		memcpy(static_cast<void*>(newData), static_cast<const void*>(_data), _length);
 
-		// 2nd arg gives proper way to delete arrays when data is gone for good
-		m_data = std::shared_ptr<byte>(newData, std::default_delete<byte[]>());
+		// lambda ensures allocation is fully freed
+		m_data = std::shared_ptr<byte>(newData, [=](byte* p){ delete [] p; });
 		m_length = _length;
 		m_timestamp = _timestamp;
 	}

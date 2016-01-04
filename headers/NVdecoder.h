@@ -2,6 +2,7 @@
 #define NV_DECODER_H
 
 // wrapper for NVIDIA's C-style video decoder
+	// need a way to cleanly signal discontinuities
 
 #include <nvcuvid.h>
 #include "CodedFrame.h"
@@ -29,7 +30,7 @@ inline void cuError(CUresult err, const char file[], unsigned line, bool abort=t
 #define DEFAULT_DECODE_SURFACES 8 // number of buffers to use while decoding
 #define DEFAULT_CLOCK_RATE 0 // not sure what effect this has
 #define DEFAULT_ERROR_THRESHOLD 10 // % corruption allowed in output stream
-#define DEFAULT_DECODE_GAP 10 // number of frames between decode and mapping for output
+#define DEFAULT_DECODE_GAP 1 // number of frames between decode and mapping for output
 #define DEFAULT_OUTPUT_SURFACES 8 // number of output buffers
 
 // more explicit
@@ -77,15 +78,14 @@ public:
 	void setCUdecoder(CUvideodecoder decoder) { m_decoderHandle = decoder; }
 	void setVideoWidth(unsigned width) { m_width = width; }
 	void setVideoHeight(unsigned height) { m_height = height; }
+	void incrementDecodeGap(void) { m_currentDecodeGap++; }
+	void decrementDecodeGap(void) { m_currentDecodeGap--; }
 
 	// utilities
-	int decodeFrame(const CodedFrame& frame, CUvideopacketflags flags=static_cast<CUvideopacketflags>(0));
-	void pushFrame(GPUFrame& toPush) // not for use outside NVdecoder
-	{
-		m_currentDecodeGap--;
-		m_outputQueue.push(toPush);
-	}
-	void signalEndOfStream(void) { decodeFrame(CodedFrame(), CUVID_PKT_ENDOFSTREAM); }
+	// too many calls to decodeFrame without popping the queue overflows GPU memory
+	int decodeFrame(const CodedFrame& frame);
+	void pushFrame(GPUFrame& toPush) { m_outputQueue.push(toPush); } // not for use outside NVdecoder
+	void signalEndOfStream(void);
 };
 
 #endif

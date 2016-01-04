@@ -217,6 +217,7 @@ CodedFrame V4L2cam::retrieveCodedFrame(void)
 	{
 		std::cerr << "error while retrieving frame" << std::endl;
 		m_isValid = false;
+		mlock.unlock();
 		streamOff();
 		return CodedFrame();
 	}
@@ -237,6 +238,7 @@ CodedFrame V4L2cam::retrieveCodedFrame(void)
 	{
 		std::cerr << "error while releasing buffer" << std::endl;
 		m_isValid = false;
+		mlock.unlock();
 		streamOff();
 		return CodedFrame();
 	}

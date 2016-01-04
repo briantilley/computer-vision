@@ -67,6 +67,8 @@ int decode_callback(void *pUserData, CUVIDPICPARAMS* pPicParams)
 	// actually decode the frame
 	cuErr(cuvidDecodePicture(pInstance->CUdecoder(), pPicParams));
 
+	pInstance->incrementDecodeGap();
+
 	// return value of 1 indicates success
 	return 1;
 }
@@ -96,7 +98,7 @@ int output_callback(void *pUserData, CUVIDPARSERDISPINFO* pParDispInfo)
 	// place into queue
 	pInstance->pushFrame(outputFrame);
 
-	std::cout << "frame pushed" << std::endl;
+	pInstance->decrementDecodeGap();
 
 	// return value of 1 indicates success
 	return 1;
@@ -171,21 +173,31 @@ NVdecoder::~NVdecoder()
 // start processing the coded frame
 // cuvidParseVideoData returns before decoding finishes
 // must pop from the output queue
-int NVdecoder::decodeFrame(const CodedFrame& frame, CUvideopacketflags flags)
+int NVdecoder::decodeFrame(const CodedFrame& frame)
 {
 	CUVIDSOURCEDATAPACKET sdp;
 
-	sdp.flags        = flags; // end of stream, valid timestamp, discontinuity
+	sdp.flags        = frame.timestamp() & CUVID_PKT_TIMESTAMP; // valid/invalid timestamp
 	sdp.payload_size = frame.size();
 	sdp.payload      = frame.raw_data();
 	sdp.timestamp    = frame.timestamp();
 
 	// parse coded frame and launch sequence, decode, and output
 	// callbacks as necessary
-	cuErr(cuvidParseVideoData(CUparser(), &sdp));
-
-	if(!(flags & CUVID_PKT_ENDOFSTREAM))
-		m_currentDecodeGap++;
+	cuErr(cuvidParseVideoData(m_parserHandle, &sdp));
 
 	return 0;
+}
+
+// call this after final call to decodeFrame for one contiguous stream of video
+void NVdecoder::signalEndOfStream(void)
+{
+	CUVIDSOURCEDATAPACKET sdp;
+
+	sdp.flags = CUVID_PKT_ENDOFSTREAM;
+	sdp.payload_size = 0;
+	sdp.payload = nullptr;
+	sdp.timestamp = 0;
+
+	cuErr(cuvidParseVideoData(m_parserHandle, &sdp));
 }

@@ -22,6 +22,15 @@ inline void cudaError(cudaError_t err, const char file[], uint32_t line, bool ab
 	}
 }
 
+// no exceptional behavior
+inline void cudaError(cudaError_t err)
+{
+	if(cudaSuccess != err)
+	{
+		std::cerr << __FILE__ << ": " << cudaGetErrorName(err) << std::endl;
+	}
+}
+
 // client code is trusted not to modify the contents of the frame
 class GPUFrame
 {
@@ -45,8 +54,8 @@ public:
 		cudaErr(cudaMemcpy2D(devPtr_copy, m_pitch, reinterpret_cast<void*>(devPtr), pitch,
 							width, height, cudaMemcpyDeviceToDevice));
 
-		// update the shared pointer
-		m_deviceData = std::shared_ptr<void>(devPtr_copy, cudaFree);
+		// update the shared pointer (uses a lambda to call cudaFree)
+		m_deviceData = std::shared_ptr<void>(devPtr_copy, [=](void* p){ cudaError(cudaFree(p)); });
 	}
 
 	GPUFrame(const GPUFrame& toCopy)
