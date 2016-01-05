@@ -99,7 +99,18 @@ int output_callback(void *pUserData, CUVIDPARSERDISPINFO* pParDispInfo)
 	// place into queue
 	pInstance->pushFrame(outputFrame);
 
+	// buffer has one less frame
 	pInstance->decrementDecodeGap();
+
+	// if stream end set
+	if(pInstance->eosFlag())
+	{
+		// buffers empty
+		if(0 >= pInstance->decodeGap())
+		{
+			pInstance->pushFrame(GPUFrame(EOS()));
+		}
+	}
 
 	// return value of 1 indicates success
 	return 1;
@@ -200,9 +211,9 @@ void NVdecoder::signalEndOfStream(void)
 	sdp.payload = nullptr;
 	sdp.timestamp = 0;
 
+	// hold on to signal
+	m_eosFlag = true;
+
 	// tell cuvid stream is done
 	cuErr(cuvidParseVideoData(m_parserHandle, &sdp));
-
-	// tell all output queue consumer stream is done
-	m_outputQueue.push(GPUFrame(GPUFrame::EOS()));
 }

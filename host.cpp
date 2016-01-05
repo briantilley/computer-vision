@@ -55,11 +55,10 @@ void threadPostProcess(ConcurrentQueue<GPUFrame>& inputQueue)
 			// convert the frame and let it go to waste
 			if(!NV12input.empty())
 			{
-				cout << "p" << flush;
 				NV12toRGB(NV12input);
 			}
 			else
-				cout << "e" << flush;
+				cout << "empty frame from decoder" << flush;
 		}
 		else
 		{
@@ -103,45 +102,18 @@ int main(void)
 	// hand input/decode over to a new thread
 	inputDecodeThread = std::thread(threadInputDecode, std::ref(webcam), std::ref(gpuDecoder));
 
-	// // start the post-processing thread
-	// postProcessThread = std::thread(threadPostProcess, std::ref(decodedQueue));
+	// start the post-processing thread
+	postProcessThread = std::thread(threadPostProcess, std::ref(decodedQueue));
 
-	// sleep(2);
+	// give time for threads to work a bit
+	sleep(2);
 
-	for(; frameCount < 10; ++frameCount)
-	// for(; true; ++frameCount)
-	{
-		// thread-safe way to get frame from queue
-		decodedQueue.pop(decodedFrame);
-
-		// framerate business
-		// framerate = 1000000.f / (decodedFrame.timestamp() - prev_timestamp);
-		// cout << static_cast<int>(framerate) << " " << flush;
-		// framerateAccumulator += framerate;
-		// prev_timestamp = decodedFrame.timestamp();
-	}
-
-	// this breaks 'threadInputDecode' from loop
+	// end of stream breaks threads from loop
 	webcam.streamOff();
 
 	// wait for all threads to finish
 	inputDecodeThread.join();
-	// postProcessThread.join();
-
-	for(; !(gpuDecoder.empty() && decodedQueue.empty()); ++frameCount) // pop frames until both are empty
-	{
-		// thread-safe way to get frame from queue
-		decodedQueue.pop(decodedFrame);
-
-		// framerate business
-		// framerate = 1000000.f / (decodedFrame.timestamp() - prev_timestamp);
-		// cout << static_cast<int>(framerate) << " " << flush;
-		// framerateAccumulator += framerate;
-		// prev_timestamp = decodedFrame.timestamp();
-	}
-
-	cout << frameCount << " frames" << endl;
-	// cout << "average framerate: " << framerateAccumulator / frameCount << " fps" << endl;
+	postProcessThread.join();
 
 	return 0;
 }

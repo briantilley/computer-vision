@@ -1,32 +1,30 @@
+# compilation files
+SRC=host.cpp device.cu V4L2cam.cpp NVdecoder.cpp
+OBJ_1=$(SRC:.cpp=.o)
+OBJ=$(OBJ_1:.cu=.o)
+# OBJ=$(patsubst %.cu,%.o,&(patsubst %.cpp,%.o,$(SRC)))
+ALL_H=headers/CodedFrame.h headers/GPUFrame.h headers/ConcurrentQueue.h headers/V4L2cam.h headers/NVdecoder.h headers/device.h
+
 # compilers
 CPP=g++-5
 CUDA=nvcc
 
-# executable name
-EXE=a.out
-DBG=debug
+all: a.out
 
-# compiler options
-CPP_OPTIONS=-std=gnu++11 -Og
-CUDA_OPTIONS=-std=c++11 --default-stream per-thread -arch sm_30
+host.o: $(ALL_H)
 
-# libraries
-LINKS=-lnvcuvid -lcuda -lcudart
+V4L2cam.o: headers/CodedFrame.h
 
-all: host device video decode
-	$(CUDA) *.o -o $(EXE) $(CUDA_OPTIONS) $(LINKS)
+NVdecoder.o: headers/CodedFrame.h headers/GPUFrame.h headers/ConcurrentQueue.h
 
-host: host.cpp
-	$(CPP) host.cpp -c $(CPP_OPTIONS)
+%.o: %.cpp
+	$(CPP) $< -c --std=gnu++11 -Og
 
-device: device.cu
-	$(CUDA) device.cu -c $(CUDA_OPTIONS)
+%.o: %.cu
+	$(CUDA) $< -c --std=c++11 --default-stream per-thread -arch sm_30
 
-video: V4L2cam.cpp
-	$(CPP) V4L2cam.cpp -c $(CPP_OPTIONS)
-
-decode: NVdecoder.cpp
-	$(CPP) NVdecoder.cpp -c $(CPP_OPTIONS)
+a.out: $(OBJ)
+	$(CUDA) $^ -o $@ -lnvcuvid -lcuda -lcudart
 
 clean:
-	rm -rf *.o $(EXE) $(DBG)
+	rm -rf *.o a.out

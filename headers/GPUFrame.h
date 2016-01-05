@@ -33,49 +33,40 @@ inline void cudaErrorNE(cudaError_t err, const char file[], uint32_t line)
 	}
 }
 
+// helper class to signal end of stream
+class EOS
+{
+public:
+	EOS() = default;
+	~EOS() = default;
+};
+
 // client code is trusted not to modify the contents of the frame
 class GPUFrame
 {
 private:
 
 	std::shared_ptr<void> m_deviceData;
-	unsigned m_pitch = 0;
-	unsigned m_width = 2;
+	size_t m_pitch = 0;
+	unsigned m_width = 0;
 	unsigned m_height = 0;
 	unsigned m_timestamp = 0; // time value in microseconds (absolute value is arbitrary)
 	bool m_endOfStream = false; // signifies last frame in the stream
 
 public:
 
-	// helper class to signal end of stream
-	class EOS
-	{
-	public:
-		EOS() = default;
-		~EOS() = default;
-	};
-
 	GPUFrame() = default; // let all members remain in the empty state
 
 	// make an entirely new allocation
 	GPUFrame(unsigned imageWidth, unsigned imageHeight, unsigned allocationCols, unsigned allocationRows,
-			 unsigned timestamp, bool eos=false)
+			 unsigned timestamp, bool eos=false): m_pitch(0), m_width(imageWidth), m_height(imageHeight), m_timestamp(timestamp), m_endOfStream(eos)
 	{
-		// initializer list was causing headaches
-		m_pitch = 0;
-		m_width = imageWidth;
-		m_height = imageHeight;
-		m_timestamp = timestamp;
-		m_endOfStream = eos;
-
 		// get space from CUDA
 		void* newAllocation;
-		cudaErr(cudaMallocPitch(&newAllocation, reinterpret_cast<size_t*>(&m_pitch), static_cast<size_t>(allocationCols), static_cast<size_t>(allocationRows)));
+		cudaErr(cudaMallocPitch(&newAllocation, &m_pitch, static_cast<size_t>(allocationCols), static_cast<size_t>(allocationRows)));
 
 		// track allocation with the shared_ptr
 		m_deviceData = std::shared_ptr<void>(newAllocation, [=](void* p){ cudaErrNE(cudaFree(p)); });
-
-		std::cout << "imageWidth = " << imageWidth << ", m_width = " << m_width << std::endl;
 	}
 
 	// copy from given location
@@ -88,10 +79,7 @@ public:
 							allocationCols, allocationRows, cudaMemcpyDeviceToDevice));
 	}
 
-	GPUFrame(EOS eos)
-	{
-		m_endOfStream = true;
-	}
+	GPUFrame(EOS eos): m_endOfStream(true) { }
 
 	// let C++ copy all member data
 	GPUFrame(const GPUFrame&) = default;
@@ -106,7 +94,7 @@ public:
 	bool eos(void) const { return m_endOfStream; }
 
 	void* data(void) { return m_deviceData.get(); }; // pointer this is wrapped around
-	unsigned pitch(void) const { return m_pitch; } // number of bytes between the start of one row and the next
+	unsigned pitch(void) const { return static_cast<unsigned>(m_pitch); } // number of bytes between the start of one row and the next
 	unsigned width(void) const { return m_width; } // dimensions (in pixels) of the image
 	unsigned height(void) const { return m_height; } // ^
 	unsigned timestamp(void) const { return	m_timestamp; }; // capture time of frame

@@ -52,6 +52,10 @@ private:
 	// keep track of frames left in NVIDIA-managed queue
 	int m_currentDecodeGap = 0;
 
+	// hold onto a signaled end of stream to follow
+	// the last frame with an empty eos one
+	bool m_eosFlag = false;
+
 	// CUDA driver is littered with global state (ew)
 	// this allows NVdecoder instances across multiple threads
 	static CUvideoctxlock s_lock; // pass this to decoder objects
@@ -72,6 +76,7 @@ public:
 	unsigned videoWidth(void) const { return m_width; }
 	unsigned videoHeight(void) const { return m_height; }
 	bool empty() const { return m_currentDecodeGap <= 0; }
+	bool eosFlag() const { return m_eosFlag; }
 	int decodeGap() const { return m_currentDecodeGap; }
 
 	// mutation (not for use outside NVdecoder)
@@ -84,8 +89,8 @@ public:
 	// utilities
 	// too many calls to decodeFrame without popping the queue overflows GPU memory
 	int decodeFrame(const CodedFrame& frame);
-	void pushFrame(GPUFrame& toPush) { m_outputQueue.push(toPush); } // not for use outside NVdecoder
-	void signalEndOfStream(void);
+	void pushFrame(const GPUFrame& toPush) { m_outputQueue.push(toPush); } // not for use outside NVdecoder
+	void signalEndOfStream(void); // use this after sending the last decoded frame for the stream
 };
 
 #endif
