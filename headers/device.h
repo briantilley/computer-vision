@@ -37,7 +37,22 @@ typedef uint64_t word; // optimal reads are 64 bits
 
 // prototypes for interface functions (no need to open up kernel protoypes)
 
-// returns an object referring to the output RGBA image in device memory
-GPUFrame NV12toRGB(GPUFrame& NV12input, bool makeAlpha=false);
+/* 
+ * for every function meant to take in one frame and output another:
+ * first prototype will allocate new space for the output frame,
+ * second prototype will use space already allocated in 'RGBframe'
+ */
+
+// generic form of aforementioned prototypes:
+// GPUFrame +fxnName+(GPUFrame& +format+input, const bool +read/write+Alpha=false);
+// int +fxnName+(GPUFrame& +format+input, GPUFrame& +newFormat+output, const bool +read/write+Alpha=false)
+
+// returns an object referring to the output RGB(A) image (format defined above) in device memory
+GPUFrame NV12toRGB(GPUFrame& NV12input, const bool writeAlpha=false); 
+int NV12toRGB(GPUFrame& NV12input, GPUFrame& RGBoutput, const bool writeAlpha=false);
+
+// returns an object referring to the output RGBA (standard format) image in device memory
+GPUFrame RGBtoRGBA(GPUFrame& RGBinput, const bool readAlpha=false);
+int RGBtoRGBA(GPUFrame& RGBinput, GPUFrame& RGBAoutput, const bool readAlpha=false);
 
 #endif

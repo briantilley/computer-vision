@@ -10,8 +10,6 @@
 using namespace std;
 
 // cuda stuff
-#include <cuda.h>
-#include <cuda_runtime.h>
 #include <cuda_profiler_api.h>
 
 #define FRAMES_TO_PROCESS 3
@@ -53,7 +51,7 @@ void threadInputDecode(V4L2cam& webcam, NVdecoder& decoder)
 void threadPostProcess(ConcurrentQueue<GPUFrame>& inputQueue)
 {
 	// frame popped from queue
-	GPUFrame NV12input;
+	GPUFrame NV12input, rgbFrame;
 
 	while(true) // break upon receiving end of stream frame
 	{
@@ -65,7 +63,8 @@ void threadPostProcess(ConcurrentQueue<GPUFrame>& inputQueue)
 			// convert the frame and let it go to waste
 			if(!NV12input.empty())
 			{
-				NV12toRGB(NV12input);
+				rgbFrame = NV12toRGB(NV12input);
+				RGBtoRGBA(rgbFrame);
 			}
 			else
 				cout << "empty frame from decoder" << flush;

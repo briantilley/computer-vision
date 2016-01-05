@@ -35,4 +35,4 @@ clean:
 
 # run nvprof with less hassle
 profile:
-	nvprof --profile-from-start off --metrics flop_count_sp_add,flop_count_sp_fma ./a.out
+	nvprof --profile-from-start off --metrics all ./a.out
