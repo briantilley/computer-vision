@@ -10,12 +10,15 @@
 using namespace std;
 
 // cuda stuff
-// #include <cuda_profiler_api.h>
+#include <cuda_profiler_api.h>
+
+#define FRAMES_TO_PROCESS 300
 
 void threadInputDecode(V4L2cam& webcam, NVdecoder& decoder)
 {
 	// frame from V4L2
 	CodedFrame inputFrame;
+	unsigned retrievedCount = 0;
 
 	while(webcam.isOn())
 	{
@@ -28,8 +31,12 @@ void threadInputDecode(V4L2cam& webcam, NVdecoder& decoder)
 		if(!inputFrame.empty())
 		{
 			cout << "." << flush;
+			retrievedCount++;
 			decoder.decodeFrame(inputFrame);
 		}
+
+		if(FRAMES_TO_PROCESS <= retrievedCount)
+			webcam.streamOff();
 	}
 	cout << endl;
 
@@ -103,17 +110,19 @@ int main(void)
 	inputDecodeThread = std::thread(threadInputDecode, std::ref(webcam), std::ref(gpuDecoder));
 
 	// start the post-processing thread
+	// cudaProfilerStart();
 	postProcessThread = std::thread(threadPostProcess, std::ref(decodedQueue));
 
-	// give time for threads to work a bit
-	sleep(2);
+	// // give time for threads to work a bit
+	// sleep(2);
 
-	// end of stream breaks threads from loop
-	webcam.streamOff();
+	// // end of stream breaks threads from loop
+	// webcam.streamOff();
 
 	// wait for all threads to finish
 	inputDecodeThread.join();
 	postProcessThread.join();
+	// cudaProfilerStop();
 
 	return 0;
 }

@@ -28,3 +28,7 @@ a.out: $(OBJ)
 
 clean:
 	rm -rf *.o a.out
+
+# run nvprof with less hassle
+profile:
+	nvprof ./a.out --profile-from-start off --metrics gld_efficiency
