@@ -47,11 +47,11 @@ class GPUFrame
 private:
 
 	std::shared_ptr<void> m_deviceData;
-	size_t m_pitch = 0;
-	unsigned m_width = 0;
-	unsigned m_height = 0;
-	unsigned m_timestamp = 0; // time value in microseconds (absolute value is arbitrary)
-	bool m_endOfStream = false; // signifies last frame in the stream
+	size_t m_pitch;
+	unsigned m_width;
+	unsigned m_height;
+	unsigned m_timestamp; // time value in microseconds (absolute value is arbitrary)
+	bool m_endOfStream; // signifies last frame in the stream
 
 public:
 
@@ -79,7 +79,7 @@ public:
 							allocationCols, allocationRows, cudaMemcpyDeviceToDevice));
 	}
 
-	GPUFrame(EOS eos): m_endOfStream(true) { }
+	GPUFrame(EOS eos): m_pitch(0), m_width(0), m_height(0), m_timestamp(0), m_endOfStream(true) { }
 
 	// let C++ copy all member data
 	GPUFrame(const GPUFrame&) = default;

@@ -8,9 +8,8 @@ Goals:
 video pipeline:
 	webcam input -> video decoder -> decoded queue -> post processing -> display (allow for >1 display stream)
 
-threads:
-	input/decode, post-processing (maybe >1), display
-	use 2 ConcurrentQueue objects between the three threads
+threads (max 6):
+	input/decode (decode is already async), post-processing (maybe >1), display
+	use 1 ConcurrentQueue objects between the three threads
 
 todo:
-	make V4L2cam thread-safe - sucks that control has to serialize with input

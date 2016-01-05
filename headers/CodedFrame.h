@@ -44,21 +44,9 @@ public:
 		m_timestamp = _timestamp;
 	}
 	
-	// copy constructor (same behavior as above)
-	CodedFrame(const CodedFrame& toCopy)
-	{
-		m_data = toCopy.m_data;
-		m_length = toCopy.m_length;
-		m_timestamp = toCopy.m_timestamp;
-	}
-
-	// copy assignment
-	void operator=(const CodedFrame& right)
-	{
-		m_data = right.m_data;
-		m_length = right.m_length;
-		m_timestamp = right.m_timestamp;
-	}
+	// copy constructor/assignment just duplicate state
+	CodedFrame(const CodedFrame& toCopy) = default;
+	CodedFrame& operator=(const CodedFrame& right) = default;
 	
 	// free copy of data
 	~CodedFrame() = default;

@@ -10,9 +10,12 @@
 using namespace std;
 
 // cuda stuff
+#include <cuda.h>
+#include <cuda_runtime.h>
 #include <cuda_profiler_api.h>
 
-#define FRAMES_TO_PROCESS 300
+#define FRAMES_TO_PROCESS 3
+unsigned gFramesToProcess = FRAMES_TO_PROCESS;
 
 void threadInputDecode(V4L2cam& webcam, NVdecoder& decoder)
 {
@@ -35,7 +38,7 @@ void threadInputDecode(V4L2cam& webcam, NVdecoder& decoder)
 			decoder.decodeFrame(inputFrame);
 		}
 
-		if(FRAMES_TO_PROCESS <= retrievedCount)
+		if(gFramesToProcess <= retrievedCount)
 			webcam.streamOff();
 	}
 	cout << endl;
@@ -75,11 +78,15 @@ void threadPostProcess(ConcurrentQueue<GPUFrame>& inputQueue)
 	cout << endl;
 }
 
-int main(void)
+int main(int argc, char* argv[])
 {
 	cout << "Let's go!" << endl;
 	cout << std::thread::hardware_concurrency() << " concurrent threads supported" << endl;
 	cout << endl;
+
+	// lifetime in terms of input frames
+	if(argc == 2)
+		gFramesToProcess = atoi(argv[1]);
 
 	// development
 	GPUFrame decodedFrame;
@@ -110,7 +117,7 @@ int main(void)
 	inputDecodeThread = std::thread(threadInputDecode, std::ref(webcam), std::ref(gpuDecoder));
 
 	// start the post-processing thread
-	// cudaProfilerStart();
+	cudaProfilerStart();
 	postProcessThread = std::thread(threadPostProcess, std::ref(decodedQueue));
 
 	// // give time for threads to work a bit
@@ -122,7 +129,7 @@ int main(void)
 	// wait for all threads to finish
 	inputDecodeThread.join();
 	postProcessThread.join();
-	// cudaProfilerStop();
+	cudaProfilerStop();
 
 	return 0;
 }

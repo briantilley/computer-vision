@@ -13,15 +13,19 @@ all: a.out
 
 host.o: $(ALL_H)
 
-V4L2cam.o: headers/CodedFrame.h
+device.o: headers/GPUFrame.h headers/device.h
 
-NVdecoder.o: headers/CodedFrame.h headers/GPUFrame.h headers/ConcurrentQueue.h
+V4L2cam.o: headers/CodedFrame.h headers/V4L2cam.h
+
+NVdecoder.o: headers/CodedFrame.h headers/GPUFrame.h headers/ConcurrentQueue.h headers/NVdecoder.h
 
 %.o: %.cpp
 	$(CPP) $< -c --std=gnu++11 -Og
 
+# second pattern used for profiling
 %.o: %.cu
-	$(CUDA) $< -c --std=c++11 --default-stream per-thread -arch sm_30
+	# $(CUDA) $< -c --std=c++11 --default-stream per-thread -arch sm_30
+	$(CUDA) $< -c --std=c++11 -arch sm_30
 
 a.out: $(OBJ)
 	$(CUDA) $^ -o $@ -lnvcuvid -lcuda -lcudart
@@ -31,4 +35,4 @@ clean:
 
 # run nvprof with less hassle
 profile:
-	nvprof ./a.out --profile-from-start off --metrics gld_efficiency
+	nvprof --profile-from-start off --metrics flop_count_sp_add,flop_count_sp_fma ./a.out

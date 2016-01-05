@@ -5,18 +5,21 @@
 #include <iostream>
 #include <cuda_profiler_api.h>
 
-#define YUV_TO_RGB_FLOAT
+// #define YUV_TO_RGB_FLOAT
 
 template<int pAidx = -1> // pointer to A in case it is to be written
 __device__ // function for GPU thread to use
 inline void YUVtoRGBmatrix(const byte& Y, const byte& U, const byte& V, byte& R, byte& G, byte& B, byte* pA = nullptr)
 {
+	// convert and clamp values between 0 and 255 inclusive
 	#ifdef YUV_TO_RGB_FLOAT
 		R = min(max(static_cast<int>(Y + 1.28033f * V + .5f), 0), 255);
 		G = min(max(static_cast<int>(Y - 0.21482f * U - 0.38059f * V + .5f), 0), 255);
 		B = min(max(static_cast<int>(Y + 2.12798f * U + .5f), 0), 255);
-	#else
-
+	#else // integer math makes kernel slightly more than 9us/9.7% faster overall
+		R = min(max(Y + ((328 * V) >> 8), 0), 255);
+		G = min(max(Y - ((55 * U + 97 * V) >> 8), 0), 255);
+		B = min(max(Y + ((545 * U) >> 8), 0), 255);
 	#endif
 
 	// always set opacity to full if specified,
@@ -42,18 +45,18 @@ void kernelNV12toRGB(const void* const input, const unsigned pitchInput,
 	const unsigned gridYidx = blockDim.y * blockIdx.y + threadIdx.y;
 
 	// NV12 global reads for 8 pixels
-	// address calculation from inner to outer access
+	// address calculation from inner to outer access:
 	// convert to byte array, position to proper row,
 	// convert to row array, position to proper column
-	word packedYbytes = reinterpret_cast<const word*>(static_cast<const byte*>(input) + gridYidx * pitchInput)[gridXidx];
-	word packedUVbytes = reinterpret_cast<const word*>(static_cast<const byte*>(input) + (gridHeight + gridYidx / 2) * pitchInput)[gridXidx];
+	const word packedYbytes = reinterpret_cast<const word*>(static_cast<const byte*>(input) + gridYidx * pitchInput)[gridXidx];
+	const word packedUVbytes = reinterpret_cast<const word*>(static_cast<const byte*>(input) + (gridHeight + gridYidx / 2) * pitchInput)[gridXidx];
 
 	// local destination for conversion
 	word packedRbytes = 0, packedGbytes = 0, packedBbytes = 0, packedAbytes = 0;
 	
 	// make byte arrays out of the packed words
-	const byte* const Y  = reinterpret_cast<byte*>(&packedYbytes);
-	const byte* const UV = reinterpret_cast<byte*>(&packedUVbytes);
+	const byte* const Y  = reinterpret_cast<const byte*>(&packedYbytes);
+	const byte* const UV = reinterpret_cast<const byte*>(&packedUVbytes);
 	byte* const R = reinterpret_cast<byte*>(&packedRbytes);
 	byte* const G = reinterpret_cast<byte*>(&packedGbytes);
 	byte* const B = reinterpret_cast<byte*>(&packedBbytes);
@@ -84,12 +87,15 @@ void kernelNV12toRGB(const void* const input, const unsigned pitchInput,
 		YUVtoRGBmatrix(Y[7], UV[6], UV[7], R[7], G[7], B[7]);
 	}
 
-	// coalesced global write of the RGB(A) data
+	// coalesced global write of the RGB(A) data for 8 pixels
+	// address calculation from inner to outer access:
+	// convert to byte array, position to proper row,
+	// convert to row array, position to proper column
 	reinterpret_cast<word*>(static_cast<byte*>(output) + gridYidx * pitchInput)[gridXidx] = packedRbytes;
-	reinterpret_cast<word*>(static_cast<byte*>(output) + gridHeight + gridYidx * pitchInput)[gridXidx] = packedGbytes;
-	reinterpret_cast<word*>(static_cast<byte*>(output) + 2 * gridHeight + gridYidx * pitchInput)[gridXidx] = packedBbytes;
+	reinterpret_cast<word*>(static_cast<byte*>(output) + (gridHeight + gridYidx) * pitchInput)[gridXidx] = packedGbytes;
+	reinterpret_cast<word*>(static_cast<byte*>(output) + (2 * gridHeight + gridYidx) * pitchInput)[gridXidx] = packedBbytes;
 	if(writeAlpha)
-		reinterpret_cast<word*>(static_cast<byte*>(output) + 3 * gridHeight + gridYidx * pitchInput)[gridXidx] = packedAbytes;
+		reinterpret_cast<word*>(static_cast<byte*>(output) + (3 * gridHeight + gridYidx) * pitchInput)[gridXidx] = packedAbytes;
 }
 
 // use this when grid has threads outside the image
@@ -132,7 +138,7 @@ GPUFrame NV12toRGB(GPUFrame& NV12frame, const bool makeAlpha)
 			kernelNV12toRGB<true><<< grid, block >>>(NV12frame.data(), NV12frame.pitch(), outputFrame.data(), outputFrame.pitch());
 		else
 			kernelNV12toRGB<false><<< grid, block >>>(NV12frame.data(), NV12frame.pitch(), outputFrame.data(), outputFrame.pitch());
-		
+
 		cudaDeviceSynchronize(); cudaErr(cudaGetLastError());
 
 		return outputFrame;

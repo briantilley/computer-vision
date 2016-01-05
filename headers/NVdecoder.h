@@ -69,6 +69,10 @@ public:
 	NVdecoder(ConcurrentQueue<GPUFrame>& outputQueue);
 	~NVdecoder();
 
+	// disable copying
+	NVdecoder(const NVdecoder&) = delete;
+	NVdecoder& operator=(const NVdecoder&) = delete;
+
 	// access (mutation happens inside class)
 	CUvideodecoder CUdecoder(void) { return m_decoderHandle; }
 	CUvideoparser CUparser(void) const { return m_parserHandle; }
