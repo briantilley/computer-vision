@@ -24,7 +24,8 @@ NVdecoder.o: headers/CodedFrame.h headers/GPUFrame.h headers/ConcurrentQueue.h h
 
 # second pattern used for profiling
 %.o: %.cu
-	# $(CUDA) $< -c --std=c++11 --default-stream per-thread -arch sm_30
+	@# $(CUDA) $< -c --std=c++11 --default-stream per-thread -arch sm_30
+	@# $(CUDA) $< -c --std=c++11 -Xcicc -O0 -Xptxas -O0 -arch sm_30
 	$(CUDA) $< -c --std=c++11 -arch sm_30
 
 a.out: $(OBJ)

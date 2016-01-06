@@ -160,16 +160,16 @@ void kernelSurfaceRGBtoRGBA(const void* const input, const unsigned pitchInput,
 		// make waste threads read from the nearest edge
 	}
 
-	word pixelPairs[4]; // pack into 4 2-pixel/8-byte pairs
-	byte* const pair_0_bytes = reinterpret_cast<byte*>(&pixelPairs[0]);
-	byte* const pair_1_bytes = reinterpret_cast<byte*>(&pixelPairs[1]);
-	byte* const pair_2_bytes = reinterpret_cast<byte*>(&pixelPairs[2]);
-	byte* const pair_3_bytes = reinterpret_cast<byte*>(&pixelPairs[3]);
+	word pixelPairs[4] = {0, 0, 0, 0}; // pack into 4 2-pixel/8-byte pairs
+	byte* pair_0_bytes = reinterpret_cast<byte*>(pixelPairs + 0);
+	byte* pair_1_bytes = reinterpret_cast<byte*>(pixelPairs + 1);
+	byte* pair_2_bytes = reinterpret_cast<byte*>(pixelPairs + 2);
+	byte* pair_3_bytes = reinterpret_cast<byte*>(pixelPairs + 3);
 
-	const byte* const R_bytes = reinterpret_cast<const byte*>(packed_R_bytes);
-	const byte* const G_bytes = reinterpret_cast<const byte*>(packed_G_bytes);
-	const byte* const B_bytes = reinterpret_cast<const byte*>(packed_B_bytes);
-	const byte* const A_bytes = reinterpret_cast<const byte*>(packed_A_bytes);
+	byte* R_bytes = reinterpret_cast<byte*>(&packed_R_bytes);
+	byte* G_bytes = reinterpret_cast<byte*>(&packed_G_bytes);
+	byte* B_bytes = reinterpret_cast<byte*>(&packed_B_bytes);
+	byte* A_bytes = reinterpret_cast<byte*>(&packed_A_bytes);
 
 	// optimize ILP exposure
 
@@ -211,12 +211,14 @@ void kernelSurfaceRGBtoRGBA(const void* const input, const unsigned pitchInput,
 	pair_3_bytes[7] = A_bytes[7]; // pixel 8
 
 	// only things left to do is write (conversion just moves data)
+	word* outputRow = reinterpret_cast<word*>(static_cast<byte*>(output) + gridYidx * pitchOutput);
+	const unsigned firstPosition = 4 * gridXidx;
 	if(!clampCoords) // perfect grid size
 	{ // cudaErrorLaunchFailure from these writes
-		reinterpret_cast<word*>(static_cast<byte*>(output) + gridYidx * pitchInput)[4 * gridXidx] = pixelPairs[0];
-		reinterpret_cast<word*>(static_cast<byte*>(output) + gridYidx * pitchInput)[4 * gridXidx + 1] = pixelPairs[0];
-		reinterpret_cast<word*>(static_cast<byte*>(output) + gridYidx * pitchInput)[4 * gridXidx + 2] = pixelPairs[0];
-		reinterpret_cast<word*>(static_cast<byte*>(output) + gridYidx * pitchInput)[4 * gridXidx + 3] = pixelPairs[0];
+		outputRow[firstPosition] = pixelPairs[0];
+		outputRow[firstPosition + 1] = pixelPairs[1];
+		outputRow[firstPosition + 2] = pixelPairs[2];
+		outputRow[firstPosition + 3] = pixelPairs[3];
 	}
 	else // wasted threads in some blocks
 	{
