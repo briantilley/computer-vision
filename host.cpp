@@ -63,8 +63,7 @@ void threadPostProcess(ConcurrentQueue<GPUFrame>& inputQueue)
 			// convert the frame and let it go to waste
 			if(!NV12input.empty())
 			{
-				rgbFrame = NV12toRGB(NV12input);
-				RGBtoRGBA(rgbFrame);
+				rgbFrame = NV12toRGBA(NV12input);
 			}
 			else
 				cout << "empty frame from decoder" << flush;
