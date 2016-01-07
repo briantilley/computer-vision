@@ -6,7 +6,9 @@ Hardware
 
   CPU - i7 2600K at stock clock speeds
 
-  GPU - EVGA GeForce GTX 760 SC
+  GPU - EVGA GeForce GTX 760 SC (shows up in CUDA as device 0)
+
+  GPU - EVGA GeForce GTX 560 SC (shows up in CUDA as device 1)
 
   Webcam - Logitech C920
 

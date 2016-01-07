@@ -3,11 +3,14 @@ SRC=host.cpp device.cu V4L2cam.cpp NVdecoder.cpp
 OBJ_1=$(SRC:.cpp=.o)
 OBJ=$(OBJ_1:.cu=.o)
 # OBJ=$(patsubst %.cu,%.o,&(patsubst %.cpp,%.o,$(SRC)))
-ALL_H=headers/CodedFrame.h headers/GPUFrame.h headers/ConcurrentQueue.h headers/V4L2cam.h headers/NVdecoder.h headers/device.h
+ALL_H=headers/constants.h headers/CodedFrame.h headers/GPUFrame.h headers/ConcurrentQueue.h headers/V4L2cam.h headers/NVdecoder.h headers/device.h
 
 # compilers
 CPP=g++-5
 CUDA=nvcc
+
+# compile for all cuda architectures of installed cards
+ARCH=-gencode arch=compute_20,code=sm_21 -gencode arch=compute_30,code=sm_30
 
 all: a.out
 
@@ -17,16 +20,20 @@ device.o: headers/GPUFrame.h headers/device.h
 
 V4L2cam.o: headers/CodedFrame.h headers/V4L2cam.h
 
-NVdecoder.o: headers/CodedFrame.h headers/GPUFrame.h headers/ConcurrentQueue.h headers/NVdecoder.h
+NVdecoder.o: headers/constants.h headers/CodedFrame.h headers/GPUFrame.h headers/ConcurrentQueue.h headers/NVdecoder.h
 
 %.o: %.cpp
 	$(CPP) $< -c --std=gnu++11 -Og
 
-# second pattern used for profiling
 %.o: %.cu
-	@# $(CUDA) $< -c --std=c++11 --default-stream per-thread -arch sm_30
-	@# $(CUDA) $< -c --std=c++11 -Xcicc -O0 -Xptxas -O0 -arch sm_30
-	$(CUDA) $< -c --std=c++11 -arch sm_30
+	@# fully optimized
+	@# $(CUDA) $< -c --std=c++11 --default-stream per-thread $(ARCH)
+
+	@# not optimized
+	@# $(CUDA) $< -c --std=c++11 -Xcicc -O0 -Xptxas -O0 $(ARCH)
+
+	@# use for profiling
+	$(CUDA) $< -c --std=c++11 $(ARCH)
 
 a.out: $(OBJ)
 	$(CUDA) $^ -o $@ -lnvcuvid -lcuda -lcudart

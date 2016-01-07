@@ -4,6 +4,7 @@
 #include "headers/V4L2cam.h"
 #include "headers/NVdecoder.h"
 #include "headers/device.h"
+#include "headers/constants.h"
 
 #include <unistd.h>
 
@@ -12,14 +13,19 @@ using namespace std;
 // cuda stuff
 #include <cuda_profiler_api.h>
 
-#define FRAMES_TO_PROCESS 3
-unsigned gFramesToProcess = FRAMES_TO_PROCESS;
+unsigned gFramesToProcess = DEFAULT_FRAMES_TO_PROCESS;
+unsigned cudaPrimaryDevice = 0;
+unsigned cudaSecondaryDevice = 1;
 
 void threadInputDecode(V4L2cam& webcam, NVdecoder& decoder)
 {
 	// frame from V4L2
 	CodedFrame inputFrame;
 	unsigned retrievedCount = 0;
+
+	// make sure we're crunching numbers on the fastest GPU
+	// every thread needs to call this to use the same GPU
+	cudaErr(cudaSetDevice(cudaPrimaryDevice));
 
 	while(webcam.isOn())
 	{
@@ -51,7 +57,11 @@ void threadInputDecode(V4L2cam& webcam, NVdecoder& decoder)
 void threadPostProcess(ConcurrentQueue<GPUFrame>& inputQueue)
 {
 	// frame popped from queue
-	GPUFrame NV12input, rgbFrame;
+	GPUFrame NV12input, RGBAframe;
+
+	// make sure we're crunching numbers on the fastest GPU
+	// every thread needs to call this to use the same GPU
+	cudaErr(cudaSetDevice(cudaPrimaryDevice));
 
 	while(true) // break upon receiving end of stream frame
 	{
@@ -63,7 +73,7 @@ void threadPostProcess(ConcurrentQueue<GPUFrame>& inputQueue)
 			// convert the frame and let it go to waste
 			if(!NV12input.empty())
 			{
-				rgbFrame = NV12toRGBA(NV12input);
+				RGBAframe = NV12toRGBA(NV12input);
 			}
 			else
 				cout << "empty frame from decoder" << flush;
@@ -78,13 +88,26 @@ void threadPostProcess(ConcurrentQueue<GPUFrame>& inputQueue)
 
 int main(int argc, char* argv[])
 {
-	cout << "Let's go!" << endl;
-	cout << std::thread::hardware_concurrency() << " concurrent threads supported" << endl;
+	// arguments
+	if(argc == 2) // first = number of frames
+		gFramesToProcess = atoi(argv[1]);
+	else if(argc == 3) // second = CUDA card to use
+	{
+		cudaPrimaryDevice = atoi(argv[2]) ? 1 : 0;
+		cudaSecondaryDevice = atoi(argv[2]) ? 0 : 1;
+	}
+
+	// identify GPUs
+	cudaDeviceProp properties;
+
+	cudaErr(cudaGetDeviceProperties(&properties, cudaPrimaryDevice));
+	cout << "primary CUDA device: " << properties.name << endl;
+
+	cudaErr(cudaGetDeviceProperties(&properties, cudaSecondaryDevice));
+	cout << "secondary CUDA device: " << properties.name << endl;
+
 	cout << endl;
 
-	// lifetime in terms of input frames
-	if(argc == 2)
-		gFramesToProcess = atoi(argv[1]);
 
 	// development
 	GPUFrame decodedFrame;
@@ -107,6 +130,10 @@ int main(int argc, char* argv[])
 
 	// decoder
 	NVdecoder gpuDecoder(decodedQueue);
+
+	// make sure we're crunching numbers on the fastest GPU
+	// every thread needs to call this to use the same GPU
+	cudaErr(cudaSetDevice(cudaPrimaryDevice));
 
 	// begin
 	webcam.streamOn();

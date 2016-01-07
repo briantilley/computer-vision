@@ -1,5 +1,9 @@
 #include "headers/NVdecoder.h"
+#include "headers/constants.h"
 #include <cstring>
+
+extern unsigned cudaPrimaryDevice;
+extern unsigned cudaSecondaryDevice;
 
 // parser works on basis of callback functions
 int sequence_callback(void *pUserData, CUVIDEOFORMAT* pVidFmt)
@@ -126,11 +130,39 @@ NVdecoder::NVdecoder(ConcurrentQueue<GPUFrame>& outputQueue): m_outputQueue(outp
 	// intialize context state (don't worry about multiple GPUs yet)
 	if(false == s_lockInitialized)
 	{
-		CUdevice device;
+		CUdevice mainDevice;
 		CUcontext context;
 		cuErr(cuInit(0)); // flags argument must be 0
-		cuErr(cuDeviceGet(&device, 0)); // 2nd argument is device number
-		cuErr(cuCtxCreate(&context, 0, device)); // 2nd argument is for flags, none needed
+		cuErr(cuDeviceGet(&mainDevice, cudaPrimaryDevice)); // we'll need access to the main device no matter what
+
+		#ifdef TRY_MULTIPLE_GPU
+
+		CUdevice candidateDevice; // try to use this device for decoding
+		int deviceCount; // number of installed CUDA devices
+		int mainCanAccessCandidate; // C-style bool
+		
+		cuErr(cuDeviceGetCount(&deviceCount));
+		if(1 < deviceCount)
+		{
+			cuErr(cuDeviceGet(&candidateDevice, cudaSecondaryDevice)); // choose device 1 (device 0 is reserved for performance)
+			cuErr(cuDeviceCanAccessPeer(&mainCanAccessCandidate, mainDevice, candidateDevice)); // ensure main GPU can read from candidate
+			if(mainCanAccessCandidate) // if peer memory access isn't possible
+			{
+				// overwrite "main" device so candidate gets used
+				// make sure peer access is enabled before starting device 0's access
+				mainDevice = candidateDevice;
+				std::cout << "using secondary device for decoding" << std::endl;
+			}
+			else
+			{
+				std::cerr << "err: can't use P2P memory access" << std::endl;
+				std::cerr << "     using primary device for decoding" << std::endl;
+			}
+		}
+
+		#endif
+
+		cuErr(cuCtxCreate(&context, 0, mainDevice)); // 2nd argument is for flags, none needed
 
 		// need to make context floating for lock
 		cuCtxPopCurrent(nullptr);
