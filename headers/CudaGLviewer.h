@@ -49,12 +49,22 @@ private:
 	// handle creation/operational failures with grace
 	m_isValid = false;
 
+	// CALLBACKS: static methods because GLFW employs a C-style API
+	
 	// called by GLFW when errors occur
-	// static because GLFW employs a C-style API
 	static cb_GLFWerror(int err, char[] description)
 	{
 		std::cerr << "GLFW error " << err << ": " << description << std::endl;
 	}
+
+	// window closing
+	static cb_GLFWcloseWindow(GLFWwindow*);
+
+	// keypresses (revisit this when display works)
+	// static cb_GLFWkeyEvent(GLFWwindow*, int key, int scancode, int action, int modifiers);
+
+	// frame buffer size
+	static cb_GLFWframebufferSize(GLFWwindow*, int width, int height);
 
 public:
 

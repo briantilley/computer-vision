@@ -12,18 +12,29 @@
 // idle callback (?)
 // GLFW error callback
 
+// Note: 'windows' and 'contexts' are inseperable and mutually exclusive,
+// so they are referred to interchangeably
+
+// put glfwSwapBuffers and glfwWaitEvents somewhere
+
 // return 0 on success, 1 on failure
 int CudaGLviewer::initGL()
 {
 	// call only on first instance creation
-	if(!glfwInit())
+	if(GL_FALSE == glfwInit())
 	{
-		m_isValid = false;
-		return 1;
+		// exit if we can't create any viewers properly
+		std::cerr << "CudaGLviewer: error initializing GLFW" << std::endl;
+		exit(EXIT_FAILURE);
 	}
 
 	// call only on first instance creation
-	glfwSetErrorCallback(cb_GLFWerror);
+	if(NULL == glfwSetErrorCallback(cb_GLFWerror))
+	{
+		// exit if we can't create any viewers properly
+		std::cerr << "CudaGLviewer: error setting GLFW error callback" << std::endl;
+		exit(EXIT_FAILURE);
+	}
 
 	// set GLFW window hints
 	#ifdef ALLOW_WINDOW_RESIZING
@@ -43,8 +54,36 @@ int CudaGLviewer::initGL()
 		return 1;
 	}
 
+	// attach this instance to the window to make life easier
+	glfwSetWindowUserPointer(m_GLFWwindow, this);
+
 	// set the current context for state-based OpenGL
 	glfwMakeContextCurrent(m_GLFWwindow);
+
+	// set window close callback
+	// call only on first instance creation
+	if(NULL == glfwSetWindowCloseCallback(m_GLFWwindow, cb_GLFWcloseWindow))
+	{
+		m_isValid = false;
+		return 1;
+	}
+
+	// set keypress callback (revisit this when display works)
+	// glfwSetKeyCallback(m_GLFWwindow, cb_GLFWkeyEvent);
+
+	// get window size
+	glfwGetFrameBufferSize(m_GLFWwindow, &m_windowWidth, &m_windowHeight);
+	
+	// set the OpenGL viewport accordingly
+	glViewport(0, 0, m_windowWidth, m_windowHeight);
+
+	// set a callback to do the above action when needed
+	// call only on first instance creation
+	if(NULL == glfwSetFramebufferSizeCallback(m_GLFWwindow, cb_GLFWframebufferSize))
+	{
+		m_isValid = false;
+		return 1;
+	}
 }
 
 // return 0 on success, 1 on failure

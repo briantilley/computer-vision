@@ -5,6 +5,8 @@
 extern unsigned cudaPrimaryDevice;
 extern unsigned cudaSecondaryDevice;
 
+// change callbacks to static methods and fix encapsulation issues
+
 // parser works on basis of callback functions
 int sequence_callback(void *pUserData, CUVIDEOFORMAT* pVidFmt)
 {
