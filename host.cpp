@@ -3,6 +3,7 @@
 #include <thread>
 #include "headers/V4L2cam.h"
 #include "headers/NVdecoder.h"
+#include "headers/CudaGLviewer.h"
 #include "headers/device.h"
 #include "headers/constants.h"
 
@@ -54,7 +55,7 @@ void threadInputDecode(V4L2cam& webcam, NVdecoder& decoder)
 }
 
 // takes decoded input from the queue and decodes with CUDA functions
-void threadPostProcess(ConcurrentQueue<GPUFrame>& inputQueue)
+void threadPostProcess(ConcurrentQueue<GPUFrame>& inputQueue, ConcurrentQueue<GPUFrame>& displayQueue)
 {
 	// frame popped from queue
 	GPUFrame NV12input, RGBAframe;
@@ -80,6 +81,8 @@ void threadPostProcess(ConcurrentQueue<GPUFrame>& inputQueue)
 		}
 		else
 		{
+			// pass EOS signal along
+			displayQueue.push(EOS());
 			break;
 		}
 	}
@@ -126,7 +129,7 @@ int main(int argc, char* argv[])
 	V4L2cam webcam(string("/dev/video0"), h264, captureWidth, captureHeight);
 
 	// decoder output queue
-	ConcurrentQueue<GPUFrame> decodedQueue;
+	ConcurrentQueue<GPUFrame> decodedQueue, displayQueue;
 
 	// decoder
 	NVdecoder gpuDecoder(decodedQueue);
@@ -134,6 +137,9 @@ int main(int argc, char* argv[])
 	// make sure we're crunching numbers on the fastest GPU
 	// every thread needs to call this to use the same GPU
 	cudaErr(cudaSetDevice(cudaPrimaryDevice));
+
+	CudaGLviewer::initGlobalState();
+	CudaGLviewer viewer(1920, 1080, "roses");
 
 	// begin
 	webcam.streamOn();
@@ -143,10 +149,20 @@ int main(int argc, char* argv[])
 
 	// start the post-processing thread
 	cudaProfilerStart();
-	postProcessThread = std::thread(threadPostProcess, std::ref(decodedQueue));
+	postProcessThread = std::thread(threadPostProcess, std::ref(decodedQueue), std::ref(displayQueue));
 
 	// // give time for threads to work a bit
 	// sleep(2);
+
+	// main thread
+	GPUFrame displayFrame;
+	while(!displayFrame.eos())
+	{
+		displayQueue.pop(displayFrame);
+
+		if(!displayFrame.eos())
+			viewer.displayFrame(displayFrame);
+	}
 
 	// // end of stream breaks threads from loop
 	// webcam.streamOff();

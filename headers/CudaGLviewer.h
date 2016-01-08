@@ -10,6 +10,7 @@
 
 // OpenGL
 #include <GL/glew.h>
+// #define GLFW_INCLUDE_GLCOREARB
 #include <GLFW/glfw3.h>
 
 // CUDA
@@ -27,6 +28,9 @@
 
 #define VERTEX_SHADER_FILENAME "shaders/vertex.glsl"
 #define FRAGMENT_SHADER_FILENAME "shaders/fragment.glsl"
+
+#define DEFAULT_WINDOW_WIDTH 640
+#define DEFAULT_WINDOW_HEIGHT 360
 
 extern unsigned cudaPrimaryDevice;
 extern unsigned cudaSecondaryDevice;
@@ -53,6 +57,8 @@ private:
 	unsigned m_imageWidth, m_imageHeight;
 	GLFWwindow* m_GLFWwindow;
 	std::string m_windowTitle;
+	GLuint m_vertexShader, m_fragmentShader, m_shaderProgram;
+	GLuint m_vertexArray, m_vertexBuffer;
 
 	// CUDA/OpenGL interop
 	GLuint m_cudaDestTexture; // copy to here from CUDA for display
@@ -63,7 +69,7 @@ private:
 	bool m_isValid = false;
 
 	// macros
-	static GLuint compileShaders(std::string, std::string);
+	GLuint compileShaders(std::string, std::string);
 	int initGL(void);
 	int initCUDA(void);
 	int initBuffers(void);
@@ -71,7 +77,6 @@ private:
 
 	// static data members
 	static bool s_globalStateInitialized;
-	static GLuint s_shaderProgram;
 
 	// CALLBACKS: static methods because GLFW employs a C-style API
 	
@@ -82,13 +87,15 @@ private:
 	}
 
 	// window closing
-	static void cb_GLFWcloseWindow(GLFWwindow*);
+	static void cb_GLFWcloseWindow(GLFWwindow*)
+	{}
 
 	// keypresses (revisit this when display works)
 	// static cb_GLFWkeyEvent(GLFWwindow*, int key, int scancode, int action, int modifiers);
 
 	// frame buffer size
-	static void cb_GLFWframebufferSize(GLFWwindow*, int width, int height);
+	static void cb_GLFWframebufferSize(GLFWwindow*, int width, int height)
+	{}
 
 public:
 
@@ -98,7 +105,7 @@ public:
 	// undefined behavior if instances still exist when this is called
 	static int destroyGlobalState(void);
 
-	CudaGLviewer();
+	CudaGLviewer(unsigned imageWidth, unsigned imageHeight, std::string windowTitle);
 	~CudaGLviewer();
 
 	// accessors

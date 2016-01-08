@@ -1,7 +1,12 @@
-#version 140 // GLSL v1.4
+#version 150 // GLSL 1.5
 
-void main(void)
+in vec2 Texcoord;
+
+out vec4 outColor;
+
+uniform sampler2D tex;
+
+void main( )
 {
-	gl_Position = glVertex;
-	glTexCoord[0].xy = gl_MultiTexCoord0.xy;
+	outColor = texture( tex, Texcoord );
 }

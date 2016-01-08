@@ -1,5 +1,5 @@
 # compilation files
-SRC=host.cpp device.cu V4L2cam.cpp NVdecoder.cpp
+SRC=host.cpp device.cu V4L2cam.cpp NVdecoder.cpp CudaGLviewer.cpp
 OBJ_1=$(SRC:.cpp=.o)
 OBJ=$(OBJ_1:.cu=.o)
 # OBJ=$(patsubst %.cu,%.o,&(patsubst %.cpp,%.o,$(SRC)))
@@ -22,6 +22,8 @@ V4L2cam.o: headers/CodedFrame.h headers/V4L2cam.h
 
 NVdecoder.o: headers/constants.h headers/CodedFrame.h headers/GPUFrame.h headers/ConcurrentQueue.h headers/NVdecoder.h
 
+CudaGLviewer.o: headers/constants.h headers/CudaGLviewer.h headers/GPUFrame.h
+
 %.o: %.cpp
 	$(CPP) $< -c --std=gnu++11 -Og
 
@@ -36,7 +38,7 @@ NVdecoder.o: headers/constants.h headers/CodedFrame.h headers/GPUFrame.h headers
 	$(CUDA) $< -c --std=c++11 $(ARCH)
 
 a.out: $(OBJ)
-	$(CUDA) $^ -o $@ -lnvcuvid -lcuda -lcudart
+	$(CUDA) $^ -o $@ -lnvcuvid -lcuda -lcudart -lGL -lGLEW -lglfw3 -lX11 -lXi -lXxf86vm -lXrandr -lXinerama -lXcursor
 
 clean:
 	rm -rf *.o a.out

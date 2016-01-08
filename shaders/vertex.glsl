@@ -1,9 +1,12 @@
-#version 140 // GLSL v1.4
+#version 150 // GLSL 1.5
 
-uniform usampler2D texImage;
+in vec2 position;
+in vec2 texcoord;
 
-void main(void)
+out vec2 Texcoord;
+
+void main( )
 {
-	vec4 color = texture(texImage, gl_TexCoord[0].xy);
-	gl_FragColor = color / 255.f;
+	Texcoord = texcoord;
+	gl_Position = vec4( position, 0.0, 1.0 );
 }

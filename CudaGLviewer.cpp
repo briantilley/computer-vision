@@ -25,36 +25,42 @@
 #define glErr() glError(glGetError(), __FILE__, __LINE__)
 inline void glError(GLenum err, const char file[], uint32_t line, bool abort=true)
 {
-    if(GL_NO_ERROR != err)
-    {
-        std::cerr << "[" << file << ":" << line << "] ";
-        std::cerr << glewGetErrorString(err) << std::endl;
-        if(abort) exit(err);
-    }
+	if(GL_NO_ERROR != err)
+	{
+		std::cerr << "[" << file << ":" << line << "] ";
+		std::cerr << glewGetErrorString(err) << std::endl;
+		if(abort) exit(err);
+	}
 }
 
 // global state management
 bool CudaGLviewer::s_globalStateInitialized = false;
-GLuint CudaGLviewer::s_shaderProgram = 0;
+// GLuint CudaGLviewer::s_shaderProgram = 0;
+
+// vertices for drawing image
+GLfloat vertexArray[] = {
+	// X Y U V
+	-1.0f,  1.0f, 0.0f, 0.0f, // upper left
+	 1.0f,  1.0f, 1.0f, 0.0f, // upper right
+	-1.0f, -1.0f, 0.0f, 1.0f, // lower left
+
+	-1.0f, -1.0f, 0.0f, 1.0f, // lower left
+	 1.0f, -1.0f, 1.0f, 1.0f, // lower right
+	 1.0f,  1.0f, 1.0f, 0.0f, // upper right
+};
 
 // call before instantiating this class
 // returns 0 on success, 1 on failure
 int CudaGLviewer::initGlobalState()
 {
 	// call only on first instance creation
+	glfwSetErrorCallback(CudaGLviewer::cb_GLFWerror);
+
+	// call only on first instance creation
 	if(GL_FALSE == glfwInit())
 	{
 		// exit if we can't create any viewers properly
 		std::cerr << "CudaGLviewer: error initializing GLFW" << std::endl;
-		s_globalStateInitialized = false;
-		return 1;
-	}
-
-	// call only on first instance creation
-	if(NULL == glfwSetErrorCallback(cb_GLFWerror))
-	{
-		// exit if we can't create any viewers properly
-		std::cerr << "CudaGLviewer: error setting GLFW error callback" << std::endl;
 		s_globalStateInitialized = false;
 		return 1;
 	}
@@ -65,9 +71,9 @@ int CudaGLviewer::initGlobalState()
 	// expected to spit out "Unknown Error", so don't abort here
 	glError(glGetError(), __FILE__, __LINE__, false);
 
-	// create the shader program to use for all windows
-	s_shaderProgram = compileShaders(VERTEX_SHADER_FILENAME, FRAGMENT_SHADER_FILENAME);
-	glErr();
+	// // create the shader program to use for all windows
+	// s_shaderProgram = compileShaders(VERTEX_SHADER_FILENAME, FRAGMENT_SHADER_FILENAME);
+	// glErr();
 
 	s_globalStateInitialized = true;
 	return 0;
@@ -84,10 +90,10 @@ int CudaGLviewer::destroyGlobalState()
 }
 
 // returns 0 on failure, anything else on success
-GLuint compileShaders(std::string vertexSourceFilename, std::string fragmentSourceFilename)
+GLuint CudaGLviewer::compileShaders(std::string vertexSourceFilename, std::string fragmentSourceFilename)
 {
-	// references to each element of the shader
-	GLuint vertexShader = 0, fragmentShader = 0, shaderProgram = 0;
+	// reference to shader to return
+	GLuint shaderProgram = 0;
 
 	// text inside each file, file handles
 	std::string vertexSourceCode, fragmentSourceCode;
@@ -134,61 +140,67 @@ GLuint compileShaders(std::string vertexSourceFilename, std::string fragmentSour
 	vertexSourceFile.close(); fragmentSourceFile.close();
 
 	// create individual shader objects
-	vertexShader = glCreateShader(GL_VERTEX_SHADER);
-	fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+	m_vertexShader = glCreateShader(GL_VERTEX_SHADER);
+	m_fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
 
 	// bind their source code
 	const GLchar* vtx = static_cast<const GLchar*>(vertexSourceCode.c_str());
 	const GLchar* frag = static_cast<const GLchar*>(fragmentSourceCode.c_str());
-	glShaderSource(vertexShader, 1, &vtx, NULL);
-	glShaderSource(fragmentShader, 1, &frag, NULL);
+	glShaderSource(m_vertexShader, 1, &vtx, NULL);
+	glShaderSource(m_fragmentShader, 1, &frag, NULL);
 
 	// compile shaders
-	glCompileShader(vertexShader);
-	glCompileShader(fragmentShader);
+	glCompileShader(m_vertexShader);
+	glCompileShader(m_fragmentShader);
 
 	// check compilation for error status
 
 	// get status from OpenGL
-	glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &compileSuccess);
+	glGetShaderiv(m_vertexShader, GL_COMPILE_STATUS, &compileSuccess);
 
 	if(0 == compileSuccess) // failed to compile
 	{
 		// print error message
-		glGetShaderInfoLog(vertexShader, 256, NULL, temp);
+		glGetShaderInfoLog(m_vertexShader, 256, NULL, temp);
 		std::cerr << "vertex shader failed to compile" << std::endl;
 		std::cerr << temp << std::endl;
 
 		// destory allocated resources
-		glDeleteShader(vertexShader);
-		glDeleteShader(fragmentShader);
+		glDeleteShader(m_vertexShader);
+		glDeleteShader(m_fragmentShader);
 		glDeleteProgram(shaderProgram);
+
+		// failure
+		return 0;
 	}
 	else
 	{
 		// bind the shader to its program
-		glAttachShader(shaderProgram, vertexShader);
+		glAttachShader(shaderProgram, m_vertexShader);
 	}
 
 	// get status from OpenGL
-	glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &compileSuccess);
+	glGetShaderiv(m_fragmentShader, GL_COMPILE_STATUS, &compileSuccess);
 
 	if(0 == compileSuccess) // failed to compile
 	{
 		// print error message
-		glGetShaderInfoLog(fragmentShader, 256, NULL, temp);
+		glGetShaderInfoLog(m_fragmentShader, 256, NULL, temp);
 		std::cerr << "fragment shader failed to compile" << std::endl;
 		std::cerr << temp << std::endl;
 
 		// destory allocated resources
-		glDeleteShader(vertexShader);
-		glDeleteShader(fragmentShader);
+		glDeleteShader(m_vertexShader);
+		glDeleteShader(m_fragmentShader);
 		glDeleteProgram(shaderProgram);
+
+		// failure
+		return 0;
 	}
 	else
 	{
 		// bind the shader to its program
-		glAttachShader(shaderProgram, fragmentShader);
+		glAttachShader(shaderProgram, m_fragmentShader);
 	}
 
 	// link the shader program together
@@ -213,31 +225,12 @@ GLuint compileShaders(std::string vertexSourceFilename, std::string fragmentSour
 int CudaGLviewer::initGL()
 {
 	// initialize GLFW
-
-	// set window close callback
-	if(NULL == glfwSetWindowCloseCallback(m_GLFWwindow, cb_GLFWcloseWindow))
-	{
-		s_globalStateInitialized = false;
-		return 1;
-	}
-
-	// set keypress callback (revisit this when display works)
-	// if(NULL == glfwSetKeyCallback(m_GLFWwindow, cb_GLFWkeyEvent))
-	// {
-	// 	s_globalStateInitialized = false;
-	// 	return 1;
-	// }
-
-	// set framebuffer size callback
-	if(NULL == glfwSetFramebufferSizeCallback(m_GLFWwindow, cb_GLFWframebufferSize))
-	{
-		s_globalStateInitialized = false;
-		return 1;
-	}
-
+	
 	// set GLFW window hints
 	
 	// disable deprecated functionality
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 
@@ -251,19 +244,38 @@ int CudaGLviewer::initGL()
 	// make a window and OpenGL context
 	// change 1st NULL to glfwGetPrimaryMonitor() for fullscreen
 	m_GLFWwindow = glfwCreateWindow(m_windowWidth, m_windowHeight, m_windowTitle.c_str(), NULL, NULL);
+	glErr();
+
+	// set the current context for state-based OpenGL
+	glfwMakeContextCurrent(m_GLFWwindow);
 
 	// NULL returned if creation fails
 	if(NULL == m_GLFWwindow)
 	{
-		m_isValid = false;
 		return 1;
 	}
 
 	// attach this instance to the window to make life easier
 	glfwSetWindowUserPointer(m_GLFWwindow, this);
 
-	// set the current context for state-based OpenGL
-	glfwMakeContextCurrent(m_GLFWwindow);
+	// set window close callback
+	if(NULL == glfwSetWindowCloseCallback(m_GLFWwindow, cb_GLFWcloseWindow))
+	{
+		return 1;
+	}
+
+	// set keypress callback (revisit this when display works)
+	// if(NULL == glfwSetKeyCallback(m_GLFWwindow, cb_GLFWkeyEvent))
+	// {
+	// 	s_globalStateInitialized = false;
+	// 	return 1;
+	// }
+
+	// set framebuffer size callback
+	if(NULL == glfwSetFramebufferSizeCallback(m_GLFWwindow, cb_GLFWframebufferSize))
+	{
+		return 1;
+	}
 
 	// V-SYNC enabled when not testing for performance
 	#ifndef PERFORMANCE_TEST
@@ -272,6 +284,17 @@ int CudaGLviewer::initGL()
 		glfwSwapInterval(0);
 	#endif
 
+	// create the shader program
+	m_shaderProgram = compileShaders(VERTEX_SHADER_FILENAME, FRAGMENT_SHADER_FILENAME);
+	if(0 == m_shaderProgram)
+	{
+		std::cerr << "CudaGLviewer: error compiling shaders" << std::endl;
+		return 1;
+	}
+
+	glErr();
+
+	// success
 	return 0;
 }
 
@@ -280,13 +303,20 @@ int CudaGLviewer::initCUDA()
 {
 	// main compute device will also be used for display
 	cudaSetDevice(cudaPrimaryDevice);
+	cudaGLSetGLDevice(cudaPrimaryDevice);
+
+	// success
+	return 0;
 }
 
 // allocate the buffers needed for interop
 // return 0 on success, 1 on failure
 int CudaGLviewer::initBuffers()
 {
-	// Nvidia: createTextureDst(&m_cudaDestTexture, m_imageWidth, m_imageHeight);
+	// OpenGL needs a vertex array
+	glGenVertexArrays(1, &m_vertexArray);
+	glBindVertexArray(m_vertexArray);
+
 	// make the texure to copy CUDA output frames into
 	glGenTextures(1, &m_cudaDestTexture);
 	glBindTexture(GL_TEXTURE_2D, m_cudaDestTexture);
@@ -312,43 +342,105 @@ int CudaGLviewer::initBuffers()
 
 	// unmap texture (CUDA now has its own handle to the texture)
 	cudaErr(cudaGraphicsUnmapResources(1, &m_cudaDestResource, 0));
+
+	// generate a vertex buffer for drawing
+	glGenBuffers(1, &m_vertexBuffer);
+	glBindBuffer(GL_ARRAY_BUFFER, m_vertexBuffer);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(vertexArray), vertexArray, GL_STATIC_DRAW);
+	glErr();
+
+	// bind vertices to shaders
+	GLuint positionAttribute = glGetAttribLocation(m_shaderProgram, "position");
+	glEnableVertexAttribArray(positionAttribute);
+	// tells OpenGL where to find exact data elements
+	glVertexAttribPointer(positionAttribute, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(GLfloat), 0);
+
+	GLuint textureLocationAttribute = glGetAttribLocation(m_shaderProgram, "texcoord");
+	glEnableVertexAttribArray(textureLocationAttribute);
+	// tells OpenGL where to find exact data elements
+	glVertexAttribPointer(textureLocationAttribute, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(GLfloat), reinterpret_cast<const GLvoid*>(2 * sizeof(GLfloat)));
+	glErr();
+
+	// set the color of a blank screen
+	glClearColor(0.f, 0.f, 0.f, 1.f);
+
+	// success
+	return 0;
 }
 
 // return 0 on success, 1 on failure
 int CudaGLviewer::freeResources()
 {
-	// destroy the window attached to this instance
-	glfwDestroyWindow(m_GLFWwindow);
+
+	// destroy vertex data
+	glBindVertexArray(0);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	// glDeleteVertexArrays(1, &m_vertexArray);
+	// glDeleteBuffers(1, &m_vertexBuffer);
+
+	// destroy shaders
+	// glDeleteProgram(m_shaderProgram);
+	// glDeleteShader(m_vertexShader);
+	// glDeleteShader(m_fragmentShader);
 
 	// destroy the texture used to display
 	glDeleteTextures(1, &m_cudaDestTexture);
+
 	glErr();
 	m_cudaDestTexture = 0;
 
-	// no longer a valid window to use, intended behavior
-	m_isValid = false;
+	// destroy the window attached to this instance
+	glfwDestroyWindow(m_GLFWwindow);
+
 	return 0;
 }
 
-CudaGLviewer::CudaGLviewer()
+CudaGLviewer::CudaGLviewer(unsigned imageWidth, unsigned imageHeight, std::string title): m_windowWidth(DEFAULT_WINDOW_WIDTH), m_windowHeight(DEFAULT_WINDOW_HEIGHT), m_imageWidth(imageWidth), m_imageHeight(imageHeight), m_windowTitle(title)
 {
+	// make sure global state is initialized
+	if(!s_globalStateInitialized)
+	{
+		std::cerr << "CudaGLviewer: global state not initialized" << std::endl;
+		std::cerr << "              please first call CudaGLviewer::initializeGlobalState()" << std::endl;
+		m_isValid = false;
+		return;
+	}
+
 	// initialize OpenGL state
 	if(0 != initGL())
-		return; // object is set as invalid
+	{
+		m_isValid = false;
+		return;
+	}
 
 	// initialize CUDA state
 	if(0 != initCUDA())
-		return; // object is set as invalid
+	{
+		m_isValid = false;
+		return;
+	}
+
+	// shared texture(s)
+	if(0 != initBuffers())
+	{
+		m_isValid = false;
+		return;
+	}
+
+	m_isValid = true;
 }
 
 CudaGLviewer::~CudaGLviewer()
 {
 	// free all instance-attached resources
 	freeResources();
+
+	// not really necessary
+	m_isValid = false;
 }
 
 // copy data to output texture
-int CudaGLviewer::displayFrame(GPUFrame& outputCudaFrame)
+int CudaGLviewer::displayFrame(GPUFrame& inputCudaFrame)
 {
 	// calculate the size of the display texture
 	unsigned numTexels = m_imageWidth * m_imageHeight;
@@ -356,10 +448,69 @@ int CudaGLviewer::displayFrame(GPUFrame& outputCudaFrame)
 	unsigned sizeTexture = sizeof(GLubyte) * numColorValues;
 
 	// copy from output frame to array
-	cudaErr(cudaMemcpyToArray(m_cudaDestArray, 0, 0, outputCudaFrame.data(), sizeTexture, cudaMemcpyDeviceToDevice));
+	cudaErr(cudaMemcpyToArray(m_cudaDestArray, 0, 0, inputCudaFrame.data(), sizeTexture, cudaMemcpyDeviceToDevice));
 
-	// do some other GL stuff
+	// push our GLFW context
+	glfwMakeContextCurrent(m_GLFWwindow);
 
-	// failure
-	return 1;
+	// write texture to back buffer
+	glBindTexture(GL_TEXTURE_2D, m_cudaDestTexture);
+	glEnable(GL_TEXTURE_2D);
+	glDisable(GL_DEPTH_TEST);
+	glDisable(GL_LIGHTING);
+	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
+
+	glMatrixMode(GL_PROJECTION);
+	glPushMatrix();
+	glLoadIdentity();
+	glOrtho(-1.0, 1.0, -1.0, 1.0, -1.0, 1.0);
+
+	glMatrixMode(GL_MODELVIEW);
+	glLoadIdentity();
+
+    glViewport(0, 0, m_windowWidth, m_windowHeight);
+
+	// set up shader program
+	glUseProgram(m_shaderProgram);
+	glUniform1i(glGetUniformLocation(m_cudaDestTexture, "tex"), 0); // texture unit 0 (?)
+	glErr();
+
+	// // set vertices
+	// glBegin(GL_QUADS);
+	// glTexCoord2f(0.0, 0.0);
+	// glVertex3f(-1.0, -1.0, 0.5);
+	// glTexCoord2f(1.0, 0.0);
+	// glVertex3f(1.0, -1.0, 0.5);
+	// glTexCoord2f(1.0, 1.0);
+	// glVertex3f(1.0, 1.0, 0.5);
+	// glTexCoord2f(0.0, 1.0);
+	// glVertex3f(-1.0, 1.0, 0.5);
+	// glEnd();
+
+	// bind vertex buffer
+	glBindBuffer(GL_ARRAY_BUFFER, m_vertexBuffer);
+
+	// draw image
+	glClear(GL_COLOR_BUFFER_BIT);
+	glDrawArrays(GL_TRIANGLES, 0, 6);
+
+	// clean up
+	glMatrixMode(GL_PROJECTION);
+	glPopMatrix();
+
+	glDisable(GL_TEXTURE_2D);
+
+	glUseProgram(0);
+
+	// check errors
+	glErr();
+
+	// swap display buffers
+	glfwSwapBuffers(m_GLFWwindow);
+
+	// // failure
+	// return 1;
+
+	// success
+	return 0;
 }
