@@ -64,7 +64,11 @@ private:
 	// need to keep track for destruction of context lock
 	static int s_instanceCount;
 
+	static bool s_globalStateInitialized;
+
 public:
+
+
 
 	NVdecoder(ConcurrentQueue<GPUFrame>& outputQueue);
 	~NVdecoder();

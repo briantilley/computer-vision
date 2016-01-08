@@ -1,8 +1,15 @@
 #ifndef CONSTANTS_H
 #define CONSTANTS_H
 
-#define TRY_MULTIPLE_GPU
+/*
+ * global constants
+ */
 
+// compile switches
+#define TRY_MULTIPLE_GPU
+#define PERFORMANCE_TEST
+
+// parameters
 #define DEFAULT_FRAMES_TO_PROCESS 3
 
 #endif
