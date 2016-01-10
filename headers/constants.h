@@ -6,7 +6,7 @@
  */
 
 // compile switches
-#define TRY_MULTIPLE_GPU
+// #define TRY_MULTIPLE_GPU
 #define PERFORMANCE_TEST
 
 // parameters

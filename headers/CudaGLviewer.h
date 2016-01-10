@@ -118,7 +118,7 @@ public:
 
 	// make sure output is m_imageWidth * m_imageHeight
 	// pixels of normal RGBA data in aligned memory
-	int displayFrame(GPUFrame&);
+	int drawFrame(GPUFrame&);
 
 };
 

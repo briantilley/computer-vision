@@ -65,16 +65,6 @@ int CudaGLviewer::initGlobalState()
 		return 1;
 	}
 
-	// initialize GLEW
-	glewExperimental = GL_TRUE; // use current functionality
-	glewInit();
-	// expected to spit out "Unknown Error", so don't abort here
-	glError(glGetError(), __FILE__, __LINE__, false);
-
-	// // create the shader program to use for all windows
-	// s_shaderProgram = compileShaders(VERTEX_SHADER_FILENAME, FRAGMENT_SHADER_FILENAME);
-	// glErr();
-
 	s_globalStateInitialized = true;
 	return 0;
 }
@@ -255,27 +245,23 @@ int CudaGLviewer::initGL()
 		return 1;
 	}
 
+	// initialize GLEW
+	glewExperimental = GL_TRUE; // use current functionality
+	glewInit();
+	// expected to spit out "Unknown Error", so don't abort here
+	glError(glGetError(), __FILE__, __LINE__, false);
+
 	// attach this instance to the window to make life easier
 	glfwSetWindowUserPointer(m_GLFWwindow, this);
 
 	// set window close callback
-	if(NULL == glfwSetWindowCloseCallback(m_GLFWwindow, cb_GLFWcloseWindow))
-	{
-		return 1;
-	}
+	glfwSetWindowCloseCallback(m_GLFWwindow, cb_GLFWcloseWindow);
 
-	// set keypress callback (revisit this when display works)
-	// if(NULL == glfwSetKeyCallback(m_GLFWwindow, cb_GLFWkeyEvent))
-	// {
-	// 	s_globalStateInitialized = false;
-	// 	return 1;
-	// }
+	// // set keypress callback (revisit this when display works)
+	// glfwSetKeyCallback(m_GLFWwindow, cb_GLFWkeyEvent)
 
 	// set framebuffer size callback
-	if(NULL == glfwSetFramebufferSizeCallback(m_GLFWwindow, cb_GLFWframebufferSize))
-	{
-		return 1;
-	}
+	glfwSetFramebufferSizeCallback(m_GLFWwindow, cb_GLFWframebufferSize);
 
 	// V-SYNC enabled when not testing for performance
 	#ifndef PERFORMANCE_TEST
@@ -371,17 +357,16 @@ int CudaGLviewer::initBuffers()
 // return 0 on success, 1 on failure
 int CudaGLviewer::freeResources()
 {
-
 	// destroy vertex data
 	glBindVertexArray(0);
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
-	// glDeleteVertexArrays(1, &m_vertexArray);
-	// glDeleteBuffers(1, &m_vertexBuffer);
+	glDeleteVertexArrays(1, &m_vertexArray);
+	glDeleteBuffers(1, &m_vertexBuffer);
 
 	// destroy shaders
-	// glDeleteProgram(m_shaderProgram);
-	// glDeleteShader(m_vertexShader);
-	// glDeleteShader(m_fragmentShader);
+	glDeleteProgram(m_shaderProgram);
+	glDeleteShader(m_vertexShader);
+	glDeleteShader(m_fragmentShader);
 
 	// destroy the texture used to display
 	glDeleteTextures(1, &m_cudaDestTexture);
@@ -410,6 +395,7 @@ CudaGLviewer::CudaGLviewer(unsigned imageWidth, unsigned imageHeight, std::strin
 	if(0 != initGL())
 	{
 		m_isValid = false;
+		std::cerr << "initGL failed" << std::endl;
 		return;
 	}
 
@@ -417,6 +403,7 @@ CudaGLviewer::CudaGLviewer(unsigned imageWidth, unsigned imageHeight, std::strin
 	if(0 != initCUDA())
 	{
 		m_isValid = false;
+		std::cerr << "initCUDA failed" << std::endl;
 		return;
 	}
 
@@ -424,6 +411,7 @@ CudaGLviewer::CudaGLviewer(unsigned imageWidth, unsigned imageHeight, std::strin
 	if(0 != initBuffers())
 	{
 		m_isValid = false;
+		std::cerr << "initBuffers failed" << std::endl;
 		return;
 	}
 
@@ -440,7 +428,7 @@ CudaGLviewer::~CudaGLviewer()
 }
 
 // copy data to output texture
-int CudaGLviewer::displayFrame(GPUFrame& inputCudaFrame)
+int CudaGLviewer::drawFrame(GPUFrame& inputCudaFrame)
 {
 	// calculate the size of the display texture
 	unsigned numTexels = m_imageWidth * m_imageHeight;

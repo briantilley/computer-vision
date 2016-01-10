@@ -161,7 +161,7 @@ int main(int argc, char* argv[])
 		displayQueue.pop(displayFrame);
 
 		if(!displayFrame.eos())
-			viewer.displayFrame(displayFrame);
+			viewer.drawFrame(displayFrame);
 	}
 
 	// // end of stream breaks threads from loop
