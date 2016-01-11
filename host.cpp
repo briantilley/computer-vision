@@ -75,6 +75,7 @@ void threadPostProcess(ConcurrentQueue<GPUFrame>& inputQueue, ConcurrentQueue<GP
 			if(!NV12input.empty())
 			{
 				RGBAframe = NV12toRGBA(NV12input);
+				displayQueue.push(RGBAframe);
 			}
 			else
 				cout << "empty frame from decoder" << flush;
@@ -159,9 +160,11 @@ int main(int argc, char* argv[])
 	while(!displayFrame.eos())
 	{
 		displayQueue.pop(displayFrame);
-
+		
 		if(!displayFrame.eos())
+		{
 			viewer.drawFrame(displayFrame);
+		}
 	}
 
 	// // end of stream breaks threads from loop

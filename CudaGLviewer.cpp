@@ -28,7 +28,7 @@ inline void glError(GLenum err, const char file[], uint32_t line, bool abort=tru
 	if(GL_NO_ERROR != err)
 	{
 		std::cerr << "[" << file << ":" << line << "] ";
-		std::cerr << glewGetErrorString(err) << std::endl;
+		std::cerr << glewGetErrorString(err) << " " << err << std::endl;
 		if(abort) exit(err);
 	}
 }
@@ -193,6 +193,8 @@ GLuint CudaGLviewer::compileShaders(std::string vertexSourceFilename, std::strin
 		glAttachShader(shaderProgram, m_fragmentShader);
 	}
 
+	glBindFragDataLocation(shaderProgram, 0, "outColor");
+
 	// link the shader program together
 	glLinkProgram(shaderProgram);
 
@@ -263,6 +265,9 @@ int CudaGLviewer::initGL()
 	// set framebuffer size callback
 	glfwSetFramebufferSizeCallback(m_GLFWwindow, cb_GLFWframebufferSize);
 
+	// set initial framebuffer size
+	glViewport(0, 0, m_windowWidth, m_windowHeight);
+
 	// V-SYNC enabled when not testing for performance
 	#ifndef PERFORMANCE_TEST
 		glfwSwapInterval(1);
@@ -278,6 +283,8 @@ int CudaGLviewer::initGL()
 		return 1;
 	}
 
+	glUseProgram(m_shaderProgram);
+
 	glErr();
 
 	// success
@@ -289,7 +296,7 @@ int CudaGLviewer::initCUDA()
 {
 	// main compute device will also be used for display
 	cudaSetDevice(cudaPrimaryDevice);
-	cudaGLSetGLDevice(cudaPrimaryDevice);
+	// cudaGLSetGLDevice(cudaPrimaryDevice);
 
 	// success
 	return 0;
@@ -313,8 +320,8 @@ int CudaGLviewer::initBuffers()
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-	// I'm guessing this is a memory allocation
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8UI_EXT, m_imageWidth, m_imageHeight, 0, GL_RGBA_INTEGER_EXT, GL_UNSIGNED_BYTE, NULL);
+	// memory allocation
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA/*8UI_EXT*/, m_imageWidth, m_imageHeight, 0, GL_RGBA/*_INTEGER_EXT*/, GL_UNSIGNED_BYTE, NULL);
 	glErr();
 
 	// register the texture with CUDA
@@ -345,6 +352,7 @@ int CudaGLviewer::initBuffers()
 	glEnableVertexAttribArray(textureLocationAttribute);
 	// tells OpenGL where to find exact data elements
 	glVertexAttribPointer(textureLocationAttribute, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(GLfloat), reinterpret_cast<const GLvoid*>(2 * sizeof(GLfloat)));
+	
 	glErr();
 
 	// set the color of a blank screen
@@ -435,32 +443,34 @@ int CudaGLviewer::drawFrame(GPUFrame& inputCudaFrame)
 	unsigned numColorValues = 4 * numTexels;
 	unsigned sizeTexture = sizeof(GLubyte) * numColorValues;
 
-	// copy from output frame to array
-	cudaErr(cudaMemcpyToArray(m_cudaDestArray, 0, 0, inputCudaFrame.data(), sizeTexture, cudaMemcpyDeviceToDevice));
-
 	// push our GLFW context
 	glfwMakeContextCurrent(m_GLFWwindow);
 
+	// cudaErr(cudaMemset2D(inputCudaFrame.data(), inputCudaFrame.pitch(), 127, inputCudaFrame.width(), inputCudaFrame.height()));
+
+	// copy from output frame to array
+	cudaErr(cudaMemcpyToArray(m_cudaDestArray, 0, 0, inputCudaFrame.data(), sizeTexture, cudaMemcpyDeviceToDevice));
+
 	// write texture to back buffer
 	glBindTexture(GL_TEXTURE_2D, m_cudaDestTexture);
-	glEnable(GL_TEXTURE_2D);
-	glDisable(GL_DEPTH_TEST);
-	glDisable(GL_LIGHTING);
-	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
+	// glEnable(GL_TEXTURE_2D);
+	// glDisable(GL_DEPTH_TEST);
+	// glDisable(GL_LIGHTING);
+	// glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
 
-	glMatrixMode(GL_PROJECTION);
-	glPushMatrix();
-	glLoadIdentity();
-	glOrtho(-1.0, 1.0, -1.0, 1.0, -1.0, 1.0);
+	// glMatrixMode(GL_PROJECTION);
+	// glPushMatrix();
+	// glLoadIdentity();
+	// glOrtho(-1.0, 1.0, -1.0, 1.0, -1.0, 1.0);
 
-	glMatrixMode(GL_MODELVIEW);
-	glLoadIdentity();
+	// glMatrixMode(GL_MODELVIEW);
+	// glLoadIdentity();
 
-    glViewport(0, 0, m_windowWidth, m_windowHeight);
+    // glViewport(0, 0, m_windowWidth, m_windowHeight);
 
-	// set up shader program
-	glUseProgram(m_shaderProgram);
-	glUniform1i(glGetUniformLocation(m_cudaDestTexture, "tex"), 0); // texture unit 0 (?)
+	// // set up shader program
+	// glUseProgram(m_shaderProgram);
+	// glUniform1i(glGetUniformLocation(m_cudaDestTexture, "tex"), 0); // texture unit 0 (?)
 	glErr();
 
 	// // set vertices
@@ -482,19 +492,22 @@ int CudaGLviewer::drawFrame(GPUFrame& inputCudaFrame)
 	glClear(GL_COLOR_BUFFER_BIT);
 	glDrawArrays(GL_TRIANGLES, 0, 6);
 
+	// swap display buffers
+	glfwSwapBuffers(m_GLFWwindow);
+
 	// clean up
-	glMatrixMode(GL_PROJECTION);
-	glPopMatrix();
+	// glMatrixMode(GL_PROJECTION);
+	// glPopMatrix();
 
-	glDisable(GL_TEXTURE_2D);
+	// glDisable(GL_TEXTURE_2D);
+	glBindTexture(GL_TEXTURE_2D, 0);
 
-	glUseProgram(0);
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+	// glUseProgram(0);
 
 	// check errors
 	glErr();
-
-	// swap display buffers
-	glfwSwapBuffers(m_GLFWwindow);
 
 	// // failure
 	// return 1;

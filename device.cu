@@ -87,7 +87,7 @@ void kernelNV12toRGBA(const void* const input, const unsigned pitchInput,
 
 	// strided global write of the RGBA data for 8 pixels,
 	// taking the hit on efficiency
-	word* const row = reinterpret_cast<word*>(static_cast<byte*>(output) + gridYidx * pitchInput);
+	word* const row = reinterpret_cast<word*>(static_cast<byte*>(output) + gridYidx * pitchOutput);
 	const unsigned firstColumn = 4 * gridXidx;
 	row[firstColumn    ] = pixelPairs[0];
 	row[firstColumn + 1] = pixelPairs[1];
@@ -103,8 +103,8 @@ GPUFrame NV12toRGBA(GPUFrame& NV12input)
 	GPUFrame allocatedFrame;
 
 	// make an object for the output image
-	unsigned allocationRows = 4 * NV12input.height();
-	unsigned allocationCols = NV12input.width();
+	unsigned allocationRows = NV12input.height();
+	unsigned allocationCols = 4 * NV12input.width();
 
 	// make the actual memory allocation
 	allocatedFrame = GPUFrame(NV12input.width(), NV12input.height(), allocationCols, allocationRows, NV12input.timestamp());
