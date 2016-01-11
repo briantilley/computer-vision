@@ -446,71 +446,32 @@ int CudaGLviewer::drawFrame(GPUFrame& inputCudaFrame)
 	// push our GLFW context
 	glfwMakeContextCurrent(m_GLFWwindow);
 
-	// cudaErr(cudaMemset2D(inputCudaFrame.data(), inputCudaFrame.pitch(), 127, inputCudaFrame.width(), inputCudaFrame.height()));
-
 	// copy from output frame to array
 	cudaErr(cudaMemcpyToArray(m_cudaDestArray, 0, 0, inputCudaFrame.data(), sizeTexture, cudaMemcpyDeviceToDevice));
 
 	// write texture to back buffer
 	glBindTexture(GL_TEXTURE_2D, m_cudaDestTexture);
-	// glEnable(GL_TEXTURE_2D);
-	// glDisable(GL_DEPTH_TEST);
-	// glDisable(GL_LIGHTING);
-	// glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
-
-	// glMatrixMode(GL_PROJECTION);
-	// glPushMatrix();
-	// glLoadIdentity();
-	// glOrtho(-1.0, 1.0, -1.0, 1.0, -1.0, 1.0);
-
-	// glMatrixMode(GL_MODELVIEW);
-	// glLoadIdentity();
-
-    // glViewport(0, 0, m_windowWidth, m_windowHeight);
-
-	// // set up shader program
-	// glUseProgram(m_shaderProgram);
-	// glUniform1i(glGetUniformLocation(m_cudaDestTexture, "tex"), 0); // texture unit 0 (?)
-	glErr();
-
-	// // set vertices
-	// glBegin(GL_QUADS);
-	// glTexCoord2f(0.0, 0.0);
-	// glVertex3f(-1.0, -1.0, 0.5);
-	// glTexCoord2f(1.0, 0.0);
-	// glVertex3f(1.0, -1.0, 0.5);
-	// glTexCoord2f(1.0, 1.0);
-	// glVertex3f(1.0, 1.0, 0.5);
-	// glTexCoord2f(0.0, 1.0);
-	// glVertex3f(-1.0, 1.0, 0.5);
-	// glEnd();
 
 	// bind vertex buffer
 	glBindBuffer(GL_ARRAY_BUFFER, m_vertexBuffer);
 
-	// draw image
+	// clear previous image
 	glClear(GL_COLOR_BUFFER_BIT);
+
+	// draw new image
 	glDrawArrays(GL_TRIANGLES, 0, 6);
 
-	// swap display buffers
+	// swap front/back buffers
 	glfwSwapBuffers(m_GLFWwindow);
 
-	// clean up
-	// glMatrixMode(GL_PROJECTION);
-	// glPopMatrix();
-
-	// glDisable(GL_TEXTURE_2D);
+	// unbind texture
 	glBindTexture(GL_TEXTURE_2D, 0);
 
+	// unbind vertex buffer
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-	// glUseProgram(0);
 
 	// check errors
 	glErr();
-
-	// // failure
-	// return 1;
 
 	// success
 	return 0;

@@ -6,19 +6,36 @@
 
 #define YUV_TO_RGB_FLOAT
 
+// convert to RGB using ITU 601 standard
 __device__ // function for GPU thread to use
 inline void YUVtoRGBAmatrix(const byte& Y, const byte& U, const byte& V, byte& R, byte& G, byte& B, byte& A)
 {
-	// convert and clamp values between 0 and 255 inclusive
-	#ifdef YUV_TO_RGB_FLOAT
-		R = min(max(static_cast<int>(Y + 1.28033f * V + .5f), 0), 255);
-		G = min(max(static_cast<int>(Y - 0.21482f * U - 0.38059f * V + .5f), 0), 255);
-		B = min(max(static_cast<int>(Y + 2.12798f * U + .5f), 0), 255);
-	#else // integer math makes kernel slightly more than 9us/9.7% faster overall
-		R = min(max(Y + ((328 * V) >> 8), 0), 255);
-		G = min(max(Y - ((55 * U + 97 * V) >> 8), 0), 255);
-		B = min(max(Y + ((545 * U) >> 8), 0), 255);
-	#endif
+	float fY, fU, fV;
+
+	fY = Y * 298.082 / 256;
+	fU = U / 256.f;
+	fV = V / 256.f;
+
+	R = min(max(static_cast<int>(fY + 408.593f * fV - 222.921), 0), 255);
+	G = min(max(static_cast<int>(fY - 100.291f * fU - 208.12f * fV + 135.576), 0), 255);
+	B = min(max(static_cast<int>(fY + 516.412 * fU - 276.836), 0), 255);
+
+	// unsigned tY, tU, tV;
+
+	// tY = (Y - 16.f) * 255 / 219;
+	// tU = (U - 128.f) * 127 / 112;
+	// tV = (V - 128.f) * 127 / 112;
+
+	// // convert and clamp values between 0 and 255 inclusive
+	// #ifdef YUV_TO_RGB_FLOAT
+	// 	R = min(max(static_cast<int>(tY + 1.28033f * tV + .5f), 0), 255);
+	// 	G = min(max(static_cast<int>(tY - 0.21482f * tU - 0.38059f * tV + .5f), 0), 255);
+	// 	B = min(max(static_cast<int>(tY + 2.12798f * tU + .5f), 0), 255);
+	// #else // integer math makes kernel slightly more than 9us/9.7% faster overall
+	// 	R = min(max(Y + ((328 * V) >> 8), 0), 255);
+	// 	G = min(max(Y - ((55 * U + 97 * V) >> 8), 0), 255);
+	// 	B = min(max(Y + ((545 * U) >> 8), 0), 255);
+	// #endif
 
 	// no alpha data in YUV
 	A = 255;
@@ -57,6 +74,7 @@ void kernelNV12toRGBA(const void* const input, const unsigned pitchInput,
 	{
 		packed_Y_bytes = reinterpret_cast<const word*>(static_cast<const byte*>(input) + gridYidx * pitchInput)[gridXidx];
 		packed_UV_bytes = reinterpret_cast<const word*>(static_cast<const byte*>(input) + (gridHeight + gridYidx / 2) * pitchInput)[gridXidx];
+		// packed_UV_bytes = 0x7f7f7f7f7f7f7f7f;
 	}
 	else // wasted threads in some blocks
 	{
