@@ -10,6 +10,6 @@
 #define PERFORMANCE_TEST
 
 // parameters
-#define DEFAULT_FRAMES_TO_PROCESS 3000
+#define DEFAULT_FRAMES_TO_PROCESS 5
 
 #endif
