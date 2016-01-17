@@ -35,7 +35,7 @@ inline void glError(GLenum err, const char file[], uint32_t line, bool abort=tru
 
 // global state management
 bool CudaGLviewer::s_globalStateInitialized = false;
-// GLuint CudaGLviewer::s_shaderProgram = 0;
+std::mutex CudaGLviewer::s_GLlock; // gives 1 instance access at a time
 
 // vertices for drawing image
 GLfloat vertexArray[] = {
@@ -93,11 +93,13 @@ GLuint CudaGLviewer::compileShaders(std::string vertexSourceFilename, std::strin
 	// temp string for loading from file
 	std::string tempStr;
 
-	// compilation checking
-	GLint compileSuccess = 0;
-	char temp[256] = {0};
-	GLint lenLinkInfoLog = 0;
-	GLsizei charsInLog = 0;
+	#ifdef DEBUG
+		// compilation checking
+		GLint compileSuccess = 0;
+		char temp[256] = {0};
+		GLint lenLinkInfoLog = 0;
+		GLsizei charsInLog = 0;
+	#endif
 
 	// initialize the program, compilation happens later
 	shaderProgram = glCreateProgram();
@@ -143,72 +145,79 @@ GLuint CudaGLviewer::compileShaders(std::string vertexSourceFilename, std::strin
 	glCompileShader(m_vertexShader);
 	glCompileShader(m_fragmentShader);
 
-	// check compilation for error status
+	#ifdef DEBUG
+		// check compilation for error status
 
-	// get status from OpenGL
-	glGetShaderiv(m_vertexShader, GL_COMPILE_STATUS, &compileSuccess);
+		// get status from OpenGL
+		glGetShaderiv(m_vertexShader, GL_COMPILE_STATUS, &compileSuccess);
 
-	if(0 == compileSuccess) // failed to compile
-	{
-		// print error message
-		glGetShaderInfoLog(m_vertexShader, 256, NULL, temp);
-		std::cerr << "vertex shader failed to compile" << std::endl;
-		std::cerr << temp << std::endl;
+		if(0 == compileSuccess) // failed to compile
+		{
+			// print error message
+			glGetShaderInfoLog(m_vertexShader, 256, NULL, temp);
+			std::cerr << "vertex shader failed to compile" << std::endl;
+			std::cerr << temp << std::endl;
 
-		// destory allocated resources
-		glDeleteShader(m_vertexShader);
-		glDeleteShader(m_fragmentShader);
-		glDeleteProgram(shaderProgram);
+			// destory allocated resources
+			glDeleteShader(m_vertexShader);
+			glDeleteShader(m_fragmentShader);
+			glDeleteProgram(shaderProgram);
 
-		// failure
-		return 0;
-	}
-	else
-	{
-		// bind the shader to its program
+			// failure
+			return 0;
+		}
+		else
+		{
+			// bind the shader to its program
+			glAttachShader(shaderProgram, m_vertexShader);
+		}
+
+		// get status from OpenGL
+		glGetShaderiv(m_fragmentShader, GL_COMPILE_STATUS, &compileSuccess);
+
+		if(0 == compileSuccess) // failed to compile
+		{
+			// print error message
+			glGetShaderInfoLog(m_fragmentShader, 256, NULL, temp);
+			std::cerr << "fragment shader failed to compile" << std::endl;
+			std::cerr << temp << std::endl;
+
+			// destory allocated resources
+			glDeleteShader(m_vertexShader);
+			glDeleteShader(m_fragmentShader);
+			glDeleteProgram(shaderProgram);
+
+			// failure
+			return 0;
+		}
+		else
+		{
+			// bind the shader to its program
+			glAttachShader(shaderProgram, m_fragmentShader);
+		}
+	#else
 		glAttachShader(shaderProgram, m_vertexShader);
-	}
-
-	// get status from OpenGL
-	glGetShaderiv(m_fragmentShader, GL_COMPILE_STATUS, &compileSuccess);
-
-	if(0 == compileSuccess) // failed to compile
-	{
-		// print error message
-		glGetShaderInfoLog(m_fragmentShader, 256, NULL, temp);
-		std::cerr << "fragment shader failed to compile" << std::endl;
-		std::cerr << temp << std::endl;
-
-		// destory allocated resources
-		glDeleteShader(m_vertexShader);
-		glDeleteShader(m_fragmentShader);
-		glDeleteProgram(shaderProgram);
-
-		// failure
-		return 0;
-	}
-	else
-	{
-		// bind the shader to its program
 		glAttachShader(shaderProgram, m_fragmentShader);
-	}
+	#endif
 
 	glBindFragDataLocation(shaderProgram, 0, "outColor");
 
 	// link the shader program together
 	glLinkProgram(shaderProgram);
 
-	// check result of shader program compile
-	glGetProgramiv(shaderProgram, GL_INFO_LOG_LENGTH, &lenLinkInfoLog);
+	#ifdef DEBUG
+		// check result of shader program compile
+		glGetProgramiv(shaderProgram, GL_INFO_LOG_LENGTH, &lenLinkInfoLog);
 
-	// print the log if something went wrong
-	if(0 < lenLinkInfoLog)
-	{
-		char* linkLog = static_cast<char*>(malloc(lenLinkInfoLog));
-		glGetProgramInfoLog(shaderProgram, lenLinkInfoLog, &charsInLog, linkLog);
-		std::cerr << "shader failed to link: " << linkLog << std::endl;
-		free(linkLog);
-	}
+		// print the log if something went wrong
+		if(0 < lenLinkInfoLog)
+		{
+			char* linkLog = static_cast<char*>(malloc(lenLinkInfoLog));
+			glGetProgramInfoLog(shaderProgram, lenLinkInfoLog, &charsInLog, linkLog);
+			std::cerr << "shader failed to link: " << linkLog << std::endl;
+			free(linkLog);
+		}
+	#endif
 
 	return shaderProgram;
 }
@@ -239,7 +248,8 @@ int CudaGLviewer::initGL()
 	glErr();
 
 	// set the current context for state-based OpenGL
-	glfwMakeContextCurrent(m_GLFWwindow);
+	// lock must stay alive until end of calling scope
+	auto lock = captureGL();
 
 	// NULL returned if creation fails
 	if(NULL == m_GLFWwindow)
@@ -282,8 +292,6 @@ int CudaGLviewer::initGL()
 		std::cerr << "CudaGLviewer: error compiling shaders" << std::endl;
 		return 1;
 	}
-
-	glUseProgram(m_shaderProgram);
 
 	glErr();
 
@@ -428,6 +436,9 @@ CudaGLviewer::CudaGLviewer(unsigned imageWidth, unsigned imageHeight, std::strin
 
 CudaGLviewer::~CudaGLviewer()
 {
+	// lock must stay alive until end of calling scope
+	auto lock = captureGL();
+
 	// free all instance-attached resources
 	freeResources();
 
@@ -438,6 +449,20 @@ CudaGLviewer::~CudaGLviewer()
 // copy data to output texture
 int CudaGLviewer::drawFrame(GPUFrame& inputCudaFrame)
 {
+	// don't let an invalid instance draw
+	if(!m_isValid)
+	{
+		std::cerr << "CudaGLviewer::drawFrame called on invalid instance" << std::endl;
+		return 1; // failure
+	}
+
+	// get complete ownership of GL to limit context switching
+	// lock must stay alive until end of calling scope
+	auto lock = captureGL();
+
+	// force CUDA context to be valid
+	cudaSetDevice(cudaPrimaryDevice);
+
 	// calculate the size of the display texture
 	unsigned numTexels = m_imageWidth * m_imageHeight;
 	unsigned numColorValues = 4 * numTexels;
@@ -457,6 +482,9 @@ int CudaGLviewer::drawFrame(GPUFrame& inputCudaFrame)
 
 	// clear previous image
 	glClear(GL_COLOR_BUFFER_BIT);
+
+	// shader program to draw texture
+	glUseProgram(m_shaderProgram);
 
 	// draw new image
 	glDrawArrays(GL_TRIANGLES, 0, 6);

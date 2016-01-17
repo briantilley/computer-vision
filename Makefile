@@ -3,7 +3,7 @@ SRC=host.cpp device.cu V4L2cam.cpp NVdecoder.cpp CudaGLviewer.cpp
 OBJ_1=$(SRC:.cpp=.o)
 OBJ=$(OBJ_1:.cu=.o)
 # OBJ=$(patsubst %.cu,%.o,&(patsubst %.cpp,%.o,$(SRC)))
-ALL_H=headers/constants.h headers/CodedFrame.h headers/GPUFrame.h headers/ConcurrentQueue.h headers/V4L2cam.h headers/NVdecoder.h headers/device.h
+ALL_H=headers/CudaGLviewer.h headers/constants.h headers/CodedFrame.h headers/GPUFrame.h headers/ConcurrentQueue.h headers/V4L2cam.h headers/NVdecoder.h headers/device.h
 
 # compilers
 CPP=g++-5

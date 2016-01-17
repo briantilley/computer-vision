@@ -17,6 +17,9 @@
 #include <cuda_runtime.h>
 #include <cuda_gl_interop.h>
 
+// STL
+#include <mutex>
+
 // self-rolled
 #include "GPUFrame.h"
 #include "constants.h"
@@ -24,7 +27,7 @@
 // development
 #include <iostream>
 
-// #define ALLOW_WINDOW_RESIZING // makes windows resizeable
+#define ALLOW_WINDOW_RESIZING // makes windows resizeable
 
 #define VERTEX_SHADER_FILENAME "shaders/vertex.glsl"
 #define FRAGMENT_SHADER_FILENAME "shaders/fragment.glsl"
@@ -68,6 +71,10 @@ private:
 	// handle creation/operational failures with grace
 	bool m_isValid = false;
 
+	// causing problems
+	// // match display intervals to input intervals
+	// unsigned m_lastTimestamp, m_lastDisplayTime;
+
 	// macros
 	GLuint compileShaders(std::string, std::string);
 	int initGL(void);
@@ -75,8 +82,17 @@ private:
 	int initBuffers(void);
 	int freeResources(void);
 
+	// called in methods that need to use openGL resources
+	std::unique_lock<std::mutex> captureGL(void)
+	{
+		std::unique_lock<std::mutex> mlock(s_GLlock);
+		glfwMakeContextCurrent(m_GLFWwindow);
+		return mlock;
+	}
+
 	// static data members
 	static bool s_globalStateInitialized;
+	static std::mutex s_GLlock;
 
 	// CALLBACKS: static methods because GLFW employs a C-style API
 	
@@ -87,15 +103,23 @@ private:
 	}
 
 	// window closing
-	static void cb_GLFWcloseWindow(GLFWwindow*)
-	{}
+	static void cb_GLFWcloseWindow(GLFWwindow* currentWindow)
+	{
+		// get the instance that owns this window and invalidate it
+		CudaGLviewer* pInstance = static_cast<CudaGLviewer*>(glfwGetWindowUserPointer(currentWindow));
+		pInstance->m_isValid = false;
+	}
 
 	// keypresses (revisit this when display works)
 	// static cb_GLFWkeyEvent(GLFWwindow*, int key, int scancode, int action, int modifiers);
 
 	// frame buffer size
-	static void cb_GLFWframebufferSize(GLFWwindow*, int width, int height)
-	{}
+	static void cb_GLFWframebufferSize(GLFWwindow* currentWindow, int width, int height)
+	{
+		// call glViewport on the proper window
+		glfwMakeContextCurrent(currentWindow);
+		glViewport(0, 0, width, height);
+	}
 
 public:
 
@@ -104,6 +128,10 @@ public:
 
 	// undefined behavior if instances still exist when this is called
 	static int destroyGlobalState(void);
+
+	// must be called frequently from the main loop
+	static void update()
+	{ glfwPollEvents(); }
 
 	CudaGLviewer(unsigned imageWidth, unsigned imageHeight, std::string windowTitle);
 	~CudaGLviewer();

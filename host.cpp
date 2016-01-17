@@ -38,7 +38,7 @@ void threadInputDecode(V4L2cam& webcam, NVdecoder& decoder)
 		// passed when constructing 'decoder'
 		if(!inputFrame.empty())
 		{
-			cout << "." << flush;
+			cout << decoder.decodeGap() << " " << flush;
 			retrievedCount++;
 			decoder.decodeFrame(inputFrame);
 		}
@@ -90,6 +90,22 @@ void threadPostProcess(ConcurrentQueue<GPUFrame>& inputQueue, ConcurrentQueue<GP
 	cout << endl;
 }
 
+void threadDisplay(unsigned imageWidth, unsigned imageHeight, string title, ConcurrentQueue<GPUFrame>& displayQueue)
+{
+	CudaGLviewer viewer(imageWidth, imageHeight, title);
+
+	GPUFrame displayFrame;
+	while(!displayFrame.eos() && viewer)
+	{
+		displayQueue.pop(displayFrame);
+		
+		if(!displayFrame.eos())
+		{
+			viewer.drawFrame(displayFrame);
+		}
+	}
+}
+
 int main(int argc, char* argv[])
 {
 	// arguments
@@ -123,7 +139,7 @@ int main(int argc, char* argv[])
 	int frameCount = 0;
 
 	// input/decode thread
-	std::thread inputDecodeThread, postProcessThread;
+	std::thread inputDecodeThread, postProcessThread, displayThread;
 
 	// camera
 	unsigned captureWidth = 1920, captureHeight = 1080;
@@ -139,9 +155,6 @@ int main(int argc, char* argv[])
 	// every thread needs to call this to use the same GPU
 	cudaErr(cudaSetDevice(cudaPrimaryDevice));
 
-	CudaGLviewer::initGlobalState();
-	CudaGLviewer viewer(1920, 1080, "roses");
-
 	// begin
 	webcam.streamOn();
 
@@ -152,27 +165,23 @@ int main(int argc, char* argv[])
 	cudaProfilerStart();
 	postProcessThread = std::thread(threadPostProcess, std::ref(decodedQueue), std::ref(displayQueue));
 
-	// // give time for threads to work a bit
-	// sleep(2);
+	// start the display thread
+	CudaGLviewer::initGlobalState();
+	displayThread = std::thread(threadDisplay, 1920, 1080, "input", std::ref(displayQueue));
 
-	// main thread
-	GPUFrame displayFrame;
-	while(!displayFrame.eos())
+	while(webcam.isOn())
 	{
-		displayQueue.pop(displayFrame);
-		
-		if(!displayFrame.eos())
-		{
-			viewer.drawFrame(displayFrame);
-		}
+		CudaGLviewer::update();
+		usleep(10000);
 	}
 
-	// // end of stream breaks threads from loop
-	// webcam.streamOff();
+	// end of stream breaks threads from loop
+	webcam.streamOff();
 
 	// wait for all threads to finish
 	inputDecodeThread.join();
 	postProcessThread.join();
+	displayThread.join();
 	cudaProfilerStop();
 
 	return 0;
