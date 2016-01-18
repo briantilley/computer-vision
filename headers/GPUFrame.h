@@ -55,7 +55,8 @@ private:
 
 public:
 
-	GPUFrame() = default; // let all members remain in the empty state
+	// let all members remain in the empty state
+	GPUFrame(): m_pitch(0), m_width(0), m_height(0), m_timestamp(0), m_endOfStream(false) { }
 
 	// make an entirely new allocation
 	GPUFrame(unsigned imageWidth, unsigned imageHeight, unsigned allocationCols, unsigned allocationRows,

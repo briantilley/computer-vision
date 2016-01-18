@@ -68,8 +68,6 @@ private:
 
 public:
 
-
-
 	NVdecoder(ConcurrentQueue<GPUFrame>& outputQueue);
 	~NVdecoder();
 

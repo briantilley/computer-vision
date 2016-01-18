@@ -35,7 +35,7 @@ CudaGLviewer.o: headers/constants.h headers/CudaGLviewer.h headers/GPUFrame.h
 	@# $(CUDA) $< -c --std=c++11 -Xcicc -O0 -Xptxas -O0 $(ARCH)
 
 	@# use for profiling
-	$(CUDA) $< -c --std=c++11 $(ARCH)
+	@# $(CUDA) $< -c --std=c++11 $(ARCH)
 
 a.out: $(OBJ)
 	$(CUDA) $^ -o $@ -lnvcuvid -lcuda -lcudart -lGL -lGLEW -lglfw3 -lX11 -lXi -lXxf86vm -lXrandr -lXinerama -lXcursor

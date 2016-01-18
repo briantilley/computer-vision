@@ -90,20 +90,32 @@ void threadPostProcess(ConcurrentQueue<GPUFrame>& inputQueue, ConcurrentQueue<GP
 	cout << endl;
 }
 
-void threadDisplay(unsigned imageWidth, unsigned imageHeight, string title, ConcurrentQueue<GPUFrame>& displayQueue)
+void threadDisplay(CudaGLviewer& viewer, ConcurrentQueue<GPUFrame>& displayQueue)
 {
-	CudaGLviewer viewer(imageWidth, imageHeight, title);
+	// CudaGLviewer viewer(imageWidth, imageHeight, title);
 
 	GPUFrame displayFrame;
-	while(!displayFrame.eos() && viewer)
+	while(true)
 	{
 		displayQueue.pop(displayFrame);
-		
-		if(!displayFrame.eos())
+		cout << "p" << endl;
+
+		if(!displayFrame.eos() && viewer)
 		{
 			viewer.drawFrame(displayFrame);
 		}
+		else // end of stream/invalidated viewer object
+		{
+			break;
+		}
 	}
+}
+
+void threadDisplayInit(unsigned imageWidth, unsigned imageHeight, string title, ConcurrentQueue<GPUFrame>& displayQueue)
+{
+	CudaGLviewer viewer(imageWidth, imageHeight, title);
+
+	threadDisplay(viewer, displayQueue);
 }
 
 int main(int argc, char* argv[])
@@ -145,6 +157,9 @@ int main(int argc, char* argv[])
 	unsigned captureWidth = 1920, captureHeight = 1080;
 	V4L2cam webcam(string("/dev/video0"), h264, captureWidth, captureHeight);
 
+	if(!webcam)
+		exit(EXIT_FAILURE);
+
 	// decoder output queue
 	ConcurrentQueue<GPUFrame> decodedQueue, displayQueue;
 
@@ -167,10 +182,25 @@ int main(int argc, char* argv[])
 
 	// start the display thread
 	CudaGLviewer::initGlobalState();
-	displayThread = std::thread(threadDisplay, 1920, 1080, "input", std::ref(displayQueue));
+	CudaGLviewer viewer(1920, 1080, "input");
+	// displayThread = std::thread(threadDisplayInit, 1920, 1080, "input", std::ref(displayQueue));
+	displayThread = std::thread(threadDisplay, std::ref(viewer), std::ref(displayQueue));
 
+	// GPUFrame displayFrame;
+	// while(true)
 	while(webcam.isOn())
 	{
+		// displayQueue.pop(displayFrame);
+
+		// if(!displayFrame.eos() && viewer)
+		// {
+		// 	viewer.drawFrame(displayFrame);
+		// }
+		// else
+		// {
+		// 	break;
+		// }
+
 		CudaGLviewer::update();
 		usleep(10000);
 	}

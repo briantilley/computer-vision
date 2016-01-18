@@ -60,6 +60,8 @@ V4L2cam::V4L2cam(std::string device, dataFormat format, unsigned& width, unsigne
 	ext_ctrls.controls[0].value  = V4L2_EXPOSURE_MANUAL;
 	ext_ctrls.controls[1].id     = V4L2_CID_EXPOSURE_AUTO_PRIORITY;
 	ext_ctrls.controls[1].value  = 0;
+	// ext_ctrls.controls[2].id     = V4L2_CID_GAIN;
+	// ext_ctrls.controls[2].value  = 127;
 
 	// disable auto exposure (limits framerate)
 	if(-1 == xioctl(fileDescriptor, VIDIOC_S_EXT_CTRLS, &ext_ctrls))

@@ -21,17 +21,7 @@
 // put glfwSwapBuffers and glfwWaitEvents somewhere
 // glfwWaitEvents must be on a separate thread from glfwSwapBuffers
 
-// OpenGL error handling
-#define glErr() glError(glGetError(), __FILE__, __LINE__)
-inline void glError(GLenum err, const char file[], uint32_t line, bool abort=true)
-{
-	if(GL_NO_ERROR != err)
-	{
-		std::cerr << "[" << file << ":" << line << "] ";
-		std::cerr << glewGetErrorString(err) << " " << err << std::endl;
-		if(abort) exit(err);
-	}
-}
+
 
 // global state management
 bool CudaGLviewer::s_globalStateInitialized = false;
@@ -95,7 +85,7 @@ GLuint CudaGLviewer::compileShaders(std::string vertexSourceFilename, std::strin
 
 	#ifdef DEBUG
 		// compilation checking
-		GLint compileSuccess = 0;
+		GLint compileSuccess = 0, validationSuccess = 0;
 		char temp[256] = {0};
 		GLint lenLinkInfoLog = 0;
 		GLsizei charsInLog = 0;
@@ -206,6 +196,14 @@ GLuint CudaGLviewer::compileShaders(std::string vertexSourceFilename, std::strin
 	glLinkProgram(shaderProgram);
 
 	#ifdef DEBUG
+		// let OpenGL validate shader program
+		glValidateProgram(shaderProgram);
+
+		// see if validation succeeded
+		glGetProgramiv(shaderProgram, GL_VALIDATE_STATUS, &validationSuccess);
+
+		std::cout << "shader validation " << ((0 != validationSuccess) ? "passed" : "failed") << std::endl;
+
 		// check result of shader program compile
 		glGetProgramiv(shaderProgram, GL_INFO_LOG_LENGTH, &lenLinkInfoLog);
 
@@ -214,7 +212,7 @@ GLuint CudaGLviewer::compileShaders(std::string vertexSourceFilename, std::strin
 		{
 			char* linkLog = static_cast<char*>(malloc(lenLinkInfoLog));
 			glGetProgramInfoLog(shaderProgram, lenLinkInfoLog, &charsInLog, linkLog);
-			std::cerr << "shader failed to link: " << linkLog << std::endl;
+			std::cerr << "shader info log [" << lenLinkInfoLog << "]: " << linkLog << std::endl;
 			free(linkLog);
 		}
 	#endif
@@ -468,17 +466,17 @@ int CudaGLviewer::drawFrame(GPUFrame& inputCudaFrame)
 	unsigned numColorValues = 4 * numTexels;
 	unsigned sizeTexture = sizeof(GLubyte) * numColorValues;
 
-	// push our GLFW context
-	glfwMakeContextCurrent(m_GLFWwindow);
-
 	// copy from output frame to array
 	cudaErr(cudaMemcpyToArray(m_cudaDestArray, 0, 0, inputCudaFrame.data(), sizeTexture, cudaMemcpyDeviceToDevice));
 
-	// write texture to back buffer
-	glBindTexture(GL_TEXTURE_2D, m_cudaDestTexture);
+	// bind the vertex array
+	glBindVertexArray(m_vertexArray);
 
-	// bind vertex buffer
-	glBindBuffer(GL_ARRAY_BUFFER, m_vertexBuffer);
+	// // write texture to back buffer
+	// glBindTexture(GL_TEXTURE_2D, m_cudaDestTexture);
+
+	// // bind vertex buffer
+	// glBindBuffer(GL_ARRAY_BUFFER, m_vertexBuffer);
 
 	// clear previous image
 	glClear(GL_COLOR_BUFFER_BIT);
@@ -492,11 +490,14 @@ int CudaGLviewer::drawFrame(GPUFrame& inputCudaFrame)
 	// swap front/back buffers
 	glfwSwapBuffers(m_GLFWwindow);
 
-	// unbind texture
-	glBindTexture(GL_TEXTURE_2D, 0);
+	// unbind the vertex array to avoid interference
+	glBindVertexArray(0);
 
-	// unbind vertex buffer
-	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	// // unbind texture
+	// glBindTexture(GL_TEXTURE_2D, 0);
+
+	// // unbind vertex buffer
+	// glBindBuffer(GL_ARRAY_BUFFER, 0);
 
 	// check errors
 	glErr();

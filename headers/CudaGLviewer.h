@@ -42,6 +42,18 @@ class CudaGLviewer
 {
 private:
 
+	// OpenGL error handling
+	#define glErr() glError(glGetError(), __FILE__, __LINE__)
+	static inline void glError(GLenum err, const char file[], uint32_t line, bool abort=true)
+	{
+		if(GL_NO_ERROR != err)
+		{
+			std::cerr << "[" << file << ":" << line << "] ";
+			std::cerr << glewGetErrorString(err) << " " << err << std::endl;
+			if(abort) exit(err);
+		}
+	}
+
 	// NEEDED MEMBER VARS (? = maybe unnecessary)
 	// unsigned window dimensions :)
 	// unsigned image dimensions :)
@@ -116,9 +128,80 @@ private:
 	// frame buffer size
 	static void cb_GLFWframebufferSize(GLFWwindow* currentWindow, int width, int height)
 	{
-		// call glViewport on the proper window
-		glfwMakeContextCurrent(currentWindow);
-		glViewport(0, 0, width, height);
+		// get attached instance for video info
+		CudaGLviewer* pInstance = static_cast<CudaGLviewer*>(glfwGetWindowUserPointer(currentWindow));
+
+		// update dimensions
+		pInstance->m_windowWidth = width; pInstance->m_windowHeight = height;
+
+		// take control of OpenGL
+		auto lock = pInstance->captureGL();
+
+		// vertical, horizontal, or no borders
+		int deltaCrossMultiplication = width * pInstance->m_imageHeight - height * pInstance->m_imageWidth;
+		if(0 < deltaCrossMultiplication) // vertical bars
+		{
+			GLfloat scaledX = (static_cast<GLfloat>(pInstance->m_imageWidth) * height) / (width * pInstance->m_imageHeight);
+
+			GLfloat scaled[] = {
+				//     X     Y    U    V
+				-scaledX,  1.f, 0.f, 0.f, // upper left
+				 scaledX,  1.f, 1.f, 0.f, // lower right
+				-scaledX, -1.f, 0.f, 1.f, // lower left
+
+				-scaledX, -1.f, 0.f, 1.f, // lower left
+				 scaledX, -1.f, 1.f, 1.f, // lower right
+				 scaledX,  1.f, 1.f, 0.f  // upper right
+			};
+
+			// bind buffer, copy new vertices, unbind
+			glBindBuffer(GL_ARRAY_BUFFER, pInstance->m_vertexBuffer);
+			glBufferData(GL_ARRAY_BUFFER, sizeof(scaled), scaled, GL_STATIC_DRAW);
+			glBindBuffer(GL_ARRAY_BUFFER, 0);
+		}
+		else if(0 > deltaCrossMultiplication) // horizontal bars
+		{
+			GLfloat scaledY = (static_cast<GLfloat>(pInstance->m_imageHeight) * width) / (height * pInstance->m_imageWidth);
+
+			GLfloat scaled[] = {
+				// X         Y    U    V
+				-1.f,  scaledY, 0.f, 0.f, // upper left
+				 1.f,  scaledY, 1.f, 0.f, // lower right
+				-1.f, -scaledY, 0.f, 1.f, // lower left
+
+				-1.f, -scaledY, 0.f, 1.f, // lower left
+				 1.f, -scaledY, 1.f, 1.f, // lower right
+				 1.f,  scaledY, 1.f, 0.f  // upper right
+			};
+
+			// bind buffer, copy new vertices, unbind
+			glBindBuffer(GL_ARRAY_BUFFER, pInstance->m_vertexBuffer);
+			glBufferData(GL_ARRAY_BUFFER, sizeof(scaled), scaled, GL_STATIC_DRAW);
+			glBindBuffer(GL_ARRAY_BUFFER, 0);
+		}
+		else // no bars
+		{
+			GLfloat scaled[] = {
+				// X     Y    U    V
+				-1.f,  1.f, 0.f, 0.f, // upper left
+				 1.f,  1.f, 1.f, 0.f, // lower right
+				-1.f, -1.f, 0.f, 1.f, // lower left
+
+				-1.f, -1.f, 0.f, 1.f, // lower left
+				 1.f, -1.f, 1.f, 1.f, // lower right
+				 1.f,  1.f, 1.f, 0.f  // upper right
+			};
+			// bind buffer, copy new vertices, unbind
+			glBindBuffer(GL_ARRAY_BUFFER, pInstance->m_vertexBuffer);
+			glBufferData(GL_ARRAY_BUFFER, sizeof(scaled), scaled, GL_STATIC_DRAW);
+			glBindBuffer(GL_ARRAY_BUFFER, 0);
+		}
+
+		std::cout << "resize " << pInstance->m_windowWidth << " " << pInstance->m_windowHeight << std::endl;
+
+		// call glViewport to apply changes
+		glViewport(0, 0, pInstance->m_windowWidth, pInstance->m_windowHeight);
+		glErr();
 	}
 
 public:
