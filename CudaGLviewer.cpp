@@ -221,6 +221,40 @@ GLuint CudaGLviewer::compileShaders(std::string vertexSourceFilename, std::strin
 // return 0 on success, 1 on failure
 int CudaGLviewer::initGL()
 {
+	// disable deprecated functionality
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
+	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+
+	// window resizeablity
+	#ifdef ALLOW_WINDOW_RESIZING
+		glfwWindowHint(GLFW_RESIZABLE, GL_TRUE);
+	#else
+		glfwWindowHint(GLFW_RESIZABLE, GL_FALSE);
+	#endif
+
+	// make a window and OpenGL context
+	// change 1st NULL to glfwGetPrimaryMonitor() for fullscreen
+	m_GLFWwindow = glfwCreateWindow(m_windowWidth, m_windowHeight, m_windowTitle.c_str(), NULL, NULL);
+	glErr();
+
+	// NULL returned if context doesn't exist
+	if(NULL == m_GLFWwindow)
+	{
+		m_isValid = false;
+		return 1;
+	}
+
+	// set window close callback
+	glfwSetWindowCloseCallback(m_GLFWwindow, cb_GLFWcloseWindow);
+
+	// // set keypress callback (revisit this when display works)
+	// glfwSetKeyCallback(m_GLFWwindow, cb_GLFWkeyEvent)
+
+	// set framebuffer size callback
+	glfwSetFramebufferSizeCallback(m_GLFWwindow, cb_GLFWframebufferSize);
+
 	// set the current context for state-based OpenGL
 	// lock must stay alive until end of calling scope
 	GLcontextWrapper ctxWrapper;
@@ -370,47 +404,32 @@ CudaGLviewer::CudaGLviewer(unsigned imageWidth, unsigned imageHeight, std::strin
 		m_isValid = false;
 		return;
 	}
-
-// OpenGL initializations that must happen in the main thread
 	
-	// disable deprecated functionality
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
-	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-
-	// window resizeablity
-	#ifdef ALLOW_WINDOW_RESIZING
-		glfwWindowHint(GLFW_RESIZABLE, GL_TRUE);
-	#else
-		glfwWindowHint(GLFW_RESIZABLE, GL_FALSE);
-	#endif
-
-	// make a window and OpenGL context
-	// change 1st NULL to glfwGetPrimaryMonitor() for fullscreen
-	m_GLFWwindow = glfwCreateWindow(m_windowWidth, m_windowHeight, m_windowTitle.c_str(), NULL, NULL);
-	glErr();
-
-	// NULL returned if context doesn't exist
-	if(NULL == m_GLFWwindow)
+	// initialize OpenGL state
+	if(0 != initGL())
 	{
 		m_isValid = false;
+		std::cerr << "initGL failed" << std::endl;
 		return;
 	}
 
-	// set window close callback
-	glfwSetWindowCloseCallback(m_GLFWwindow, cb_GLFWcloseWindow);
+	// initialize CUDA state
+	if(0 != initCUDA())
+	{
+		m_isValid = false;
+		std::cerr << "initCUDA failed" << std::endl;
+		return;
+	}
 
-	// // set keypress callback (revisit this when display works)
-	// glfwSetKeyCallback(m_GLFWwindow, cb_GLFWkeyEvent)
+	// shared texture(s)
+	if(0 != initBuffers())
+	{
+		m_isValid = false;
+		std::cerr << "initBuffers failed" << std::endl;
+		return;
+	}
 
-	// set framebuffer size callback
-	glfwSetFramebufferSizeCallback(m_GLFWwindow, cb_GLFWframebufferSize);
-
-	// not ready to run yet
-	m_isValid = false;
-
-// -------
+	m_isValid = true;
 }
 
 CudaGLviewer::~CudaGLviewer()
@@ -424,37 +443,6 @@ CudaGLviewer::~CudaGLviewer()
 
 	// not really necessary
 	m_isValid = false;
-}
-
-// certain portions of the object must be initialized in its running thread
-int CudaGLviewer::initialize(void)
-{
-	// initialize OpenGL state
-	if(0 != initGL())
-	{
-		m_isValid = false;
-		std::cerr << "initGL failed" << std::endl;
-		return 1;
-	}
-
-	// initialize CUDA state
-	if(0 != initCUDA())
-	{
-		m_isValid = false;
-		std::cerr << "initCUDA failed" << std::endl;
-		return 1;
-	}
-
-	// shared texture(s)
-	if(0 != initBuffers())
-	{
-		m_isValid = false;
-		std::cerr << "initBuffers failed" << std::endl;
-		return 1;
-	}
-
-	m_isValid = true;
-	return 0;
 }
 
 // copy data to output texture

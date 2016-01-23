@@ -106,9 +106,6 @@ private:
 	// handle creation/operational failures with grace
 	bool m_isValid = false;
 
-	// track when to close the window
-	bool m_shouldClose = false;
-
 	// running thread needs to call glViewport to resize window
 	bool m_windowResized = false;
 
@@ -128,7 +125,6 @@ private:
 	{
 		cudaErr(cudaSetDevice(cudaPrimaryDevice)); // set CUDA device for good measure
 		std::unique_lock<std::mutex> mlock(s_GLlock);
-		// glfwMakeContextCurrent(m_GLFWwindow);
 		ctx.lock(m_GLFWwindow);
 		return mlock;
 	}
@@ -150,7 +146,7 @@ private:
 	{
 		// get the instance that owns this window and invalidate it
 		CudaGLviewer* pInstance = static_cast<CudaGLviewer*>(glfwGetWindowUserPointer(currentWindow));
-		pInstance->m_shouldClose = true;
+		pInstance->m_isValid = false;
 	}
 
 	// keypresses (revisit this when display works)
@@ -254,15 +250,11 @@ public:
 	CudaGLviewer(unsigned imageWidth, unsigned imageHeight, std::string windowTitle);
 	~CudaGLviewer();
 
-	// call this in the running thread
-	int initialize(void);
-
 	// accessors
 
 	// indicate healthy instance
-	operator bool() const { return m_isValid && !m_shouldClose; } // implicit conversion
-	bool good(void) const { return m_isValid && !m_shouldClose; }
-	bool shouldClose(void) const { return m_shouldClose; }
+	operator bool() const { return m_isValid; } // implicit conversion
+	bool good(void) const { return m_isValid; }
 
 	// utilities
 

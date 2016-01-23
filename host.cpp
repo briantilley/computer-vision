@@ -10,8 +10,8 @@
 #include <unistd.h>
 
 #define THREADED_VIEWER
-// #define CUDA_PROFILING
-#define CUDA_GL_UPDATE_INTERVAL 10000
+#define CUDA_PROFILING
+#define GL_VIEWER_UPDATE_INTERVAL 100
 
 using namespace std;
 
@@ -97,7 +97,6 @@ void threadPostProcess(ConcurrentQueue<GPUFrame>& inputQueue, ConcurrentQueue<GP
 void threadDisplay(CudaGLviewer& viewer, ConcurrentQueue<GPUFrame>& displayQueue)
 {
 	GPUFrame displayFrame;
-	viewer.initialize();
 
 	while(true)
 	{
@@ -140,15 +139,6 @@ int main(int argc, char* argv[])
 
 	cout << endl;
 
-	// development
-	GPUFrame decodedFrame;
-
-	// metrics
-	float framerate = 0;
-	unsigned prev_timestamp = 0;
-	float framerateAccumulator = 0;
-	int frameCount = 0;
-
 	// input/decode thread
 	std::thread inputDecodeThread, postProcessThread, displayThread;
 
@@ -159,15 +149,11 @@ int main(int argc, char* argv[])
 	if(!webcam)
 		exit(EXIT_FAILURE);
 
-	// decoder output queue
+	// frame queues between threads
 	ConcurrentQueue<GPUFrame> decodedQueue, displayQueue;
 
 	// decoder
 	NVdecoder gpuDecoder(decodedQueue);
-
-	// make sure we're crunching numbers on the fastest GPU
-	// every thread needs to call this to use the same GPU
-	cudaErr(cudaSetDevice(cudaPrimaryDevice));
 
 	// begin
 	webcam.streamOn();
@@ -186,16 +172,18 @@ int main(int argc, char* argv[])
 	CudaGLviewer::initGlobalState();
 	CudaGLviewer viewer(1920, 1080, "input");
 
+	if(!viewer)
+		exit(EXIT_FAILURE);
+
 	#ifdef THREADED_VIEWER
 		displayThread = std::thread(threadDisplay, std::ref(viewer), std::ref(displayQueue));
-		while(webcam.isOn() && !viewer.shouldClose())
+		while(webcam.isOn() && viewer)
 		{
 			CudaGLviewer::update();
-			usleep(CUDA_GL_UPDATE_INTERVAL);
+			usleep(GL_VIEWER_UPDATE_INTERVAL);
 		}
 	#else
 		GPUFrame displayFrame;
-		viewer.initialize();
 		while(viewer)
 		{
 			displayQueue.pop(displayFrame);
