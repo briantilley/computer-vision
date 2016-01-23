@@ -38,6 +38,22 @@
 extern unsigned cudaPrimaryDevice;
 extern unsigned cudaSecondaryDevice;
 
+class GLcontextWrapper
+{
+public:
+	GLcontextWrapper() = default;
+
+	void lock(GLFWwindow* context)
+	{
+		glfwMakeContextCurrent(context);
+	}
+
+	~GLcontextWrapper()
+	{
+		glfwMakeContextCurrent(NULL);
+	}
+};
+
 class CudaGLviewer
 {
 private:
@@ -93,6 +109,9 @@ private:
 	// track when to close the window
 	bool m_shouldClose = false;
 
+	// running thread needs to call glViewport to resize window
+	bool m_windowResized = false;
+
 	// causing problems
 	// // match display intervals to input intervals
 	// unsigned m_lastTimestamp, m_lastDisplayTime;
@@ -105,11 +124,12 @@ private:
 	int freeResources(void);
 
 	// called in methods that need to use openGL resources
-	std::unique_lock<std::mutex> captureGL(void) const
+	std::unique_lock<std::mutex> captureGL(GLcontextWrapper& ctx) const
 	{
 		cudaErr(cudaSetDevice(cudaPrimaryDevice)); // set CUDA device for good measure
 		std::unique_lock<std::mutex> mlock(s_GLlock);
-		glfwMakeContextCurrent(m_GLFWwindow);
+		// glfwMakeContextCurrent(m_GLFWwindow);
+		ctx.lock(m_GLFWwindow);
 		return mlock;
 	}
 
@@ -146,7 +166,8 @@ private:
 		pInstance->m_windowWidth = width; pInstance->m_windowHeight = height;
 
 		// take control of OpenGL
-		auto lock = pInstance->captureGL();
+		GLcontextWrapper contextWrapper;
+		auto lock = pInstance->captureGL(contextWrapper);
 
 		// vertical, horizontal, or no borders
 		int deltaCrossMultiplication = width * pInstance->m_imageHeight - height * pInstance->m_imageWidth;
@@ -210,7 +231,9 @@ private:
 
 		std::cout << "resize " << pInstance->m_windowWidth << " " << pInstance->m_windowHeight << std::endl;
 
-		// call glViewport to apply changes
+		// signal resize event
+		// pInstance->m_windowResized = true;
+		// // call glViewport to apply changes
 		glViewport(0, 0, pInstance->m_windowWidth, pInstance->m_windowHeight);
 		glErr();
 	}
@@ -237,8 +260,8 @@ public:
 	// accessors
 
 	// indicate healthy instance
-	operator bool() const { return m_isValid || !m_shouldClose; } // implicit conversion
-	bool good(void) const { return m_isValid || !m_shouldClose; }
+	operator bool() const { return m_isValid && !m_shouldClose; } // implicit conversion
+	bool good(void) const { return m_isValid && !m_shouldClose; }
 	bool shouldClose(void) const { return m_shouldClose; }
 
 	// utilities

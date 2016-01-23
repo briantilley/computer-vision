@@ -223,7 +223,8 @@ int CudaGLviewer::initGL()
 {
 	// set the current context for state-based OpenGL
 	// lock must stay alive until end of calling scope
-	auto lock = captureGL();
+	GLcontextWrapper ctxWrapper;
+	auto lock = captureGL(ctxWrapper);
 
 	// initialize GLEW
 	glewExperimental = GL_TRUE; // use current functionality
@@ -274,7 +275,8 @@ int CudaGLviewer::initCUDA()
 int CudaGLviewer::initBuffers()
 {
 	// get control of OpenGL
-	auto lock = captureGL();
+	GLcontextWrapper ctxWrapper;
+	auto lock = captureGL(ctxWrapper);
 
 	// OpenGL needs a vertex array
 	glGenVertexArrays(1, &m_vertexArray);
@@ -414,7 +416,8 @@ CudaGLviewer::CudaGLviewer(unsigned imageWidth, unsigned imageHeight, std::strin
 CudaGLviewer::~CudaGLviewer()
 {
 	// lock must stay alive until end of calling scope
-	auto lock = captureGL();
+	GLcontextWrapper ctxWrapper;
+	auto lock = captureGL(ctxWrapper);
 
 	// free all instance-attached resources
 	freeResources();
@@ -458,18 +461,23 @@ int CudaGLviewer::initialize(void)
 int CudaGLviewer::drawFrame(GPUFrame& inputCudaFrame)
 {
 	// don't let an invalid instance draw
-	if(!m_isValid)
+	if(!good())
 	{
-		std::cerr << "CudaGLviewer::drawFrame called on invalid instance" << std::endl;
+		std::cerr << "CudaGLviewer::drawFrame called on bad instance" << std::endl;
 		return 1; // failure
+	}
+
+	// window may need resizing
+	if(m_windowResized)
+	{
+		glViewport(0, 0, m_windowWidth, m_windowHeight);
+		m_windowResized = false; // reset the flag
 	}
 
 	// get complete ownership of GL to limit context switching
 	// lock must stay alive until end of calling scope
-	auto lock = captureGL();
-
-	// force CUDA context to be valid
-	cudaSetDevice(cudaPrimaryDevice);
+	GLcontextWrapper ctxWrapper;
+	auto lock = captureGL(ctxWrapper);
 
 	// calculate the size of the display texture
 	unsigned numTexels = m_imageWidth * m_imageHeight;
@@ -481,12 +489,6 @@ int CudaGLviewer::drawFrame(GPUFrame& inputCudaFrame)
 
 	// bind the vertex array
 	glBindVertexArray(m_vertexArray);
-
-	// // write texture to back buffer
-	// glBindTexture(GL_TEXTURE_2D, m_cudaDestTexture);
-
-	// // bind vertex buffer
-	// glBindBuffer(GL_ARRAY_BUFFER, m_vertexBuffer);
 
 	// clear previous image
 	glClear(GL_COLOR_BUFFER_BIT);
@@ -502,12 +504,6 @@ int CudaGLviewer::drawFrame(GPUFrame& inputCudaFrame)
 
 	// unbind the vertex array to avoid interference
 	glBindVertexArray(0);
-
-	// // unbind texture
-	// glBindTexture(GL_TEXTURE_2D, 0);
-
-	// // unbind vertex buffer
-	// glBindBuffer(GL_ARRAY_BUFFER, 0);
 
 	// check errors
 	glErr();

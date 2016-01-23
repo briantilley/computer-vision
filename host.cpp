@@ -9,6 +9,10 @@
 
 #include <unistd.h>
 
+#define THREADED_VIEWER
+// #define CUDA_PROFILING
+#define CUDA_GL_UPDATE_INTERVAL 10000
+
 using namespace std;
 
 // cuda stuff
@@ -99,7 +103,6 @@ void threadDisplay(CudaGLviewer& viewer, ConcurrentQueue<GPUFrame>& displayQueue
 	{
 		displayQueue.pop(displayFrame);
 
-		cout << (viewer ? "v" : "!v") << flush;
 		if(!displayFrame.eos() && viewer)
 		{
 			viewer.drawFrame(displayFrame);
@@ -110,13 +113,6 @@ void threadDisplay(CudaGLviewer& viewer, ConcurrentQueue<GPUFrame>& displayQueue
 		}
 	}
 }
-
-// void threadDisplayInit(unsigned imageWidth, unsigned imageHeight, string title, ConcurrentQueue<GPUFrame>& displayQueue)
-// {
-// 	CudaGLviewer viewer(imageWidth, imageHeight, title);
-
-// 	threadDisplay(viewer, displayQueue);
-// }
 
 int main(int argc, char* argv[])
 {
@@ -137,6 +133,10 @@ int main(int argc, char* argv[])
 
 	cudaErr(cudaGetDeviceProperties(&properties, cudaSecondaryDevice));
 	cout << "secondary CUDA device: " << properties.name << endl;
+
+	#ifdef THREADED_VIEWER
+		cout << "running OpenGL on multiple threads" << endl;
+	#endif
 
 	cout << endl;
 
@@ -175,43 +175,61 @@ int main(int argc, char* argv[])
 	// hand input/decode over to a new thread
 	inputDecodeThread = std::thread(threadInputDecode, std::ref(webcam), std::ref(gpuDecoder));
 
-	// start the post-processing thread
-	cudaProfilerStart();
+	#ifdef CUDA_PROFILING
+		// start the post-processing thread
+		cudaProfilerStart();
+	#endif
+
 	postProcessThread = std::thread(threadPostProcess, std::ref(decodedQueue), std::ref(displayQueue));
 
 	// start the display thread
 	CudaGLviewer::initGlobalState();
 	CudaGLviewer viewer(1920, 1080, "input");
-	// displayThread = std::thread(threadDisplayInit, 1920, 1080, "input", std::ref(displayQueue));
-	displayThread = std::thread(threadDisplay, std::ref(viewer), std::ref(displayQueue));
 
-	// GPUFrame displayFrame;
-	// while(true)
-	while(webcam.isOn() && !viewer.shouldClose())
-	{
-		// displayQueue.pop(displayFrame);
+	#ifdef THREADED_VIEWER
+		displayThread = std::thread(threadDisplay, std::ref(viewer), std::ref(displayQueue));
+		while(webcam.isOn() && !viewer.shouldClose())
+		{
+			CudaGLviewer::update();
+			usleep(CUDA_GL_UPDATE_INTERVAL);
+		}
+	#else
+		GPUFrame displayFrame;
+		viewer.initialize();
+		while(viewer)
+		{
+			displayQueue.pop(displayFrame);
 
-		// if(!displayFrame.eos() && viewer)
-		// {
-		// 	viewer.drawFrame(displayFrame);
-		// }
-		// else
-		// {
-		// 	break;
-		// }
+			if(!displayFrame.eos() && viewer)
+			{
+				viewer.drawFrame(displayFrame);
+			}
+			else
+			{
+				break;
+			}
 
-		CudaGLviewer::update();
-		usleep(10000);
-	}
+			CudaGLviewer::update();
+		}
+	#endif
 
-	// end of stream breaks threads from loop
+	// triggers all other threads to stop
 	webcam.streamOff();
+
+	// causes some XIO error
+	// CudaGLviewer::destroyGlobalState();
 
 	// wait for all threads to finish
 	inputDecodeThread.join();
 	postProcessThread.join();
-	displayThread.join();
-	cudaProfilerStop();
+
+	#ifdef THREADED_VIEWER
+		displayThread.join();
+	#endif
+	
+	#ifdef CUDA_PROFILING
+		cudaProfilerStop();
+	#endif
 
 	return 0;
 }
