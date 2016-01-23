@@ -92,14 +92,14 @@ void threadPostProcess(ConcurrentQueue<GPUFrame>& inputQueue, ConcurrentQueue<GP
 
 void threadDisplay(CudaGLviewer& viewer, ConcurrentQueue<GPUFrame>& displayQueue)
 {
-	// CudaGLviewer viewer(imageWidth, imageHeight, title);
-
 	GPUFrame displayFrame;
+	viewer.initialize();
+
 	while(true)
 	{
 		displayQueue.pop(displayFrame);
-		cout << "p" << endl;
 
+		cout << (viewer ? "v" : "!v") << flush;
 		if(!displayFrame.eos() && viewer)
 		{
 			viewer.drawFrame(displayFrame);
@@ -111,12 +111,12 @@ void threadDisplay(CudaGLviewer& viewer, ConcurrentQueue<GPUFrame>& displayQueue
 	}
 }
 
-void threadDisplayInit(unsigned imageWidth, unsigned imageHeight, string title, ConcurrentQueue<GPUFrame>& displayQueue)
-{
-	CudaGLviewer viewer(imageWidth, imageHeight, title);
+// void threadDisplayInit(unsigned imageWidth, unsigned imageHeight, string title, ConcurrentQueue<GPUFrame>& displayQueue)
+// {
+// 	CudaGLviewer viewer(imageWidth, imageHeight, title);
 
-	threadDisplay(viewer, displayQueue);
-}
+// 	threadDisplay(viewer, displayQueue);
+// }
 
 int main(int argc, char* argv[])
 {
@@ -139,7 +139,6 @@ int main(int argc, char* argv[])
 	cout << "secondary CUDA device: " << properties.name << endl;
 
 	cout << endl;
-
 
 	// development
 	GPUFrame decodedFrame;
@@ -188,7 +187,7 @@ int main(int argc, char* argv[])
 
 	// GPUFrame displayFrame;
 	// while(true)
-	while(webcam.isOn())
+	while(webcam.isOn() && !viewer.shouldClose())
 	{
 		// displayQueue.pop(displayFrame);
 

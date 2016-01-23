@@ -54,18 +54,25 @@ private:
 		}
 	}
 
-	// NEEDED MEMBER VARS (? = maybe unnecessary)
-	// unsigned window dimensions :)
-	// unsigned image dimensions :)
-	// GLFWwindow* GLFW window handle :)
-	// GLuint texture
-	// cudaGraphicsResource cuda texture handle :)
-	// GLuint fbo (?)
-	// cudaGraphicsResource cuda texture screen resource (?)
-	// unsigned texture byte size
-	// unsigned texture dimensions
-	// GLuint texture screen (render target?)
-	// GLuint cuda texture (cuda output copy?)
+	/*
+	 * GLFW multithreading restrictions
+	 *
+	 * main thread:
+	 * 		glfwSetErrorCallback
+	 * 		glfwInit
+	 * 		glfwTerminate
+	 * 		glfwWindowHint
+	 *  	glfwCreateWindow
+	 * 		glfwSetWindowCloseCallback
+	 * 		glfwSetKeyCallback
+	 * 		glfwSetFramebufferSizeCallback
+	 * 		glfwDestroyWindow
+	 *
+	 * any thread:
+	 * 		glfwSetWindowUserPointer
+	 * 		glfwSwapInterval
+	 * 		glfwSwapBuffers
+	 */
 
 	// OpenGL member variables
 	unsigned m_windowWidth, m_windowHeight;
@@ -83,6 +90,9 @@ private:
 	// handle creation/operational failures with grace
 	bool m_isValid = false;
 
+	// track when to close the window
+	bool m_shouldClose = false;
+
 	// causing problems
 	// // match display intervals to input intervals
 	// unsigned m_lastTimestamp, m_lastDisplayTime;
@@ -95,8 +105,9 @@ private:
 	int freeResources(void);
 
 	// called in methods that need to use openGL resources
-	std::unique_lock<std::mutex> captureGL(void)
+	std::unique_lock<std::mutex> captureGL(void) const
 	{
+		cudaErr(cudaSetDevice(cudaPrimaryDevice)); // set CUDA device for good measure
 		std::unique_lock<std::mutex> mlock(s_GLlock);
 		glfwMakeContextCurrent(m_GLFWwindow);
 		return mlock;
@@ -119,7 +130,7 @@ private:
 	{
 		// get the instance that owns this window and invalidate it
 		CudaGLviewer* pInstance = static_cast<CudaGLviewer*>(glfwGetWindowUserPointer(currentWindow));
-		pInstance->m_isValid = false;
+		pInstance->m_shouldClose = true;
 	}
 
 	// keypresses (revisit this when display works)
@@ -216,14 +227,19 @@ public:
 	static void update()
 	{ glfwPollEvents(); }
 
+	// instances must be created in the main thread
 	CudaGLviewer(unsigned imageWidth, unsigned imageHeight, std::string windowTitle);
 	~CudaGLviewer();
+
+	// call this in the running thread
+	int initialize(void);
 
 	// accessors
 
 	// indicate healthy instance
-	operator bool() const { return m_isValid; } // implicit conversion
-	bool good() const { return m_isValid; }
+	operator bool() const { return m_isValid || !m_shouldClose; } // implicit conversion
+	bool good(void) const { return m_isValid || !m_shouldClose; }
+	bool shouldClose(void) const { return m_shouldClose; }
 
 	// utilities
 
