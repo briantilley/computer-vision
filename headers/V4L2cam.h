@@ -7,6 +7,7 @@
 
 // V4L2 includes
 #include <linux/videodev2.h>
+#include <linux/v4l2-controls.h>
 #include <errno.h>
 #include <sys/ioctl.h>
 #include <fcntl.h>
@@ -22,6 +23,16 @@ typedef uint8_t byte;
 enum dataFormat
 {
 	h264 = V4L2_PIX_FMT_H264
+};
+
+// camera controls (exposure, gain, focus, etc.)
+enum control
+{
+	EXPOSURE  = 1,
+	GAIN      = 2,
+	AUTOFOCUS = 3,
+	FOCUS     = 4,
+	NONE      = 0
 };
 
 #define DEFAULT_BUFFER_COUNT 8
@@ -74,8 +85,8 @@ public:
 	// accessors
 	int getWidth(void) const { return videoWidth; }
 	int getHeight(void) const { return videoHeight; }
-	float getExposure(void); // return exposure value in seconds
 	bool isOn(void) const { return m_isOn; }
+	int getControl(control); // get value of specified control
 	
 	// indicate good stream
 	operator bool() const { return m_isValid; } // implicit conversion
@@ -84,8 +95,8 @@ public:
 	// mutators
 	int streamOn(void); // start v4l2 stream
 	int streamOff(void); // stop v4l2 stream
-	int setExposure(float exposure); // set to exposure in seconds
-	int changeExposure(bool increase, float deltaExposure); // lengthen/shorten by deltaExposure
+	int setControl(control, int); // set value of control to given value
+	int changeControl(control, int); // change value of control by given amount
 
 	// utilities
 	CodedFrame retrieveCodedFrame(void);

@@ -63,6 +63,9 @@ enum _key
 	KEY_ARROW_DOWN  = 2,
 	KEY_ARROW_LEFT  = 3,
 	KEY_ARROW_RIGHT = 4,
+	KEY_F           = 5,
+	KEY_R           = 6,
+	KEY_V           = 7,
 	KEY_NONE        = 0
 };
 
@@ -222,6 +225,19 @@ private:
 			case GLFW_KEY_RIGHT:
 				event.key = KEY_ARROW_RIGHT;
 			break;
+
+			case GLFW_KEY_F:
+				event.key = KEY_F;
+			break;
+
+			case GLFW_KEY_R:
+				event.key = KEY_R;
+			break;
+
+			case GLFW_KEY_V:
+				event.key = KEY_V;
+			break;
+
 
 			default:
 				event.key = KEY_NONE;

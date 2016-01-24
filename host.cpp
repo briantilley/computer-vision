@@ -46,8 +46,8 @@ void threadInputDecode(V4L2cam& webcam, NVdecoder& decoder)
 			decoder.decodeFrame(inputFrame);
 		}
 
-		if(gFramesToProcess <= retrievedCount)
-			webcam.streamOff();
+		// if(gFramesToProcess <= retrievedCount)
+		// 	webcam.streamOff();
 	}
 	cout << endl;
 
@@ -183,8 +183,34 @@ int main(int argc, char* argv[])
 			// get the key event
 			keyInputQueue.pop(currentEvent);
 
-			// print contents to console
-			cout << endl << currentEvent.key << "|" << currentEvent.action << "|" << hex << currentEvent.modifiers << endl;
+			if(currentEvent.action != ACTION_RELEASE)
+			{
+				switch(currentEvent.key)
+				{
+					case KEY_ARROW_UP;
+						webcam.changeControl(EXPOSURE, 5);
+					break;
+
+					case KEY_ARROW_DOWN:
+						webcam.changeControl(EXPOSURE, -5);
+					break;
+					
+					case KEY_F:
+						bool autofocus = webcam.getControl(AUTOFOCUS);
+						webcam.setControl(AUTOFOCUS, !autofocus);
+						cout << endl << "autofocus " << (!autofocus ? "on" : "off") << endl;
+					break;
+					
+					case KEY_R:
+						webcam.changeControl(FOCUS, 5);
+					break;
+					
+					case KEY_V:
+						webcam.changeControl(FOCUS, -5);
+					break;
+					
+				}
+			}
 		}
 
 		usleep(GL_VIEWER_UPDATE_INTERVAL);

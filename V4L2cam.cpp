@@ -136,14 +136,6 @@ V4L2cam::~V4L2cam()
 	delete [] buffers;
 }
 
-float V4L2cam::getExposure(void)
-{
-	// make other operations wait
-	std::unique_lock<std::mutex> mlock(m_cameraMutex);
-
-	return 0.f;
-}
-
 // webcam on
 int V4L2cam::streamOn(void)
 {
@@ -181,20 +173,171 @@ int V4L2cam::streamOff(void)
 	return 0;
 }
 
-int V4L2cam::setExposure(float exposure)
+int V4L2cam::getControl(control parameter)
 {
 	// make other operations wait
 	std::unique_lock<std::mutex> mlock(m_cameraMutex);
+	
+	// controls struct for V4L2
+	struct v4l2_ext_controls controls;
+	struct v4l2_ext_control ctrlStruct;
 
-	return 1;
+	// get individual control
+	unsigned controlID;
+	switch(parameter)
+	{
+		case EXPOSURE:
+			controlID = V4L2_CID_EXPOSURE_ABSOLUTE;
+		break;
+
+		case GAIN:
+			controlID = V4L2_CID_GAIN;
+		break;
+
+		case AUTOFOCUS:
+			controlID = V4L2_CID_FOCUS_AUTO;
+		break;
+
+		case FOCUS:
+			controlID = V4L2_CID_FOCUS_ABSOLUTE;
+		break;
+
+		default: // no control to set
+			return -1;
+		break;
+	}
+
+	controls.count = 1;
+	controls.ctrl_class = V4L2_CTRL_CLASS_CAMERA;
+	controls.controls = &ctrlStruct;
+
+	controls.controls[0].id = controlID;
+	controls.controls[0].size = 0;
+	controls.controls[0].reserved2[0] = 0;
+
+	if(-1 == xioctl(fileDescriptor, VIDIOC_G_EXT_CTRLS, &controls))
+	{
+		perror("error while getting controls");
+		m_isValid = false;
+		return -1;
+	}
+
+	return controls.controls[0].value;
 }
 
-int V4L2cam::changeExposure(bool increase, float deltaExposure)
+int V4L2cam::setControl(control parameter, int value)
 {
 	// make other operations wait
 	std::unique_lock<std::mutex> mlock(m_cameraMutex);
+	
+	// controls struct for V4L2
+	struct v4l2_ext_controls controls;
+	struct v4l2_ext_control ctrlStruct;
 
-	return 1;
+	// get individual control
+	unsigned controlID;
+	switch(parameter)
+	{
+		case EXPOSURE:
+			controlID = V4L2_CID_EXPOSURE_ABSOLUTE;
+		break;
+
+		case GAIN:
+			controlID = V4L2_CID_GAIN;
+		break;
+
+		case AUTOFOCUS:
+			controlID = V4L2_CID_FOCUS_AUTO;
+		break;
+
+		case FOCUS:
+			controlID = V4L2_CID_FOCUS_ABSOLUTE;
+		break;
+
+		default: // no control to set
+			return 1;
+		break;
+	}
+
+	controls.count = 1;
+	controls.ctrl_class = V4L2_CTRL_CLASS_CAMERA;
+	// controls.which = V4L2_CTRL_WHICH_CUR_VAL;
+	controls.controls = &ctrlStruct;
+
+	controls.controls[0].id     = controlID;
+	controls.controls[0].size   = 0;
+	controls.controls[0].reserved2[0] = 0;
+	controls.controls[0].value  = value;
+
+	if(-1 == xioctl(fileDescriptor, VIDIOC_S_EXT_CTRLS, &controls))
+	{
+		perror("error while setting controls");
+		m_isValid = false;
+		return 1;
+	}
+
+	return 0;
+}
+
+int V4L2cam::changeControl(enum control parameter, int delta)
+{
+	// make other operations wait
+	std::unique_lock<std::mutex> mlock(m_cameraMutex);
+	
+	// controls struct for V4L2
+	struct v4l2_ext_controls controls;
+	struct v4l2_ext_control ctrlStruct;
+
+	// get individual control
+	unsigned controlID;
+	switch(parameter)
+	{
+		case EXPOSURE:
+			controlID = V4L2_CID_EXPOSURE_ABSOLUTE;
+		break;
+
+		case GAIN:
+			controlID = V4L2_CID_GAIN;
+		break;
+
+		case AUTOFOCUS:
+			controlID = V4L2_CID_FOCUS_AUTO;
+		break;
+
+		case FOCUS:
+			controlID = V4L2_CID_FOCUS_ABSOLUTE;
+		break;
+
+		default: // no control to set
+			return 1;
+		break;
+	}
+
+	controls.count = 1;
+	controls.ctrl_class = V4L2_CTRL_CLASS_CAMERA;
+	controls.controls = &ctrlStruct;
+
+	controls.controls[0].id = controlID;
+	controls.controls[0].size = 0;
+	controls.controls[0].reserved2[0] = 0;
+
+	if(-1 == xioctl(fileDescriptor, VIDIOC_G_EXT_CTRLS, &controls))
+	{
+		perror("error while getting controls");
+		m_isValid = false;
+		return 1;
+	}
+
+	controls.controls[0].value += delta;
+
+	if(-1 == xioctl(fileDescriptor, VIDIOC_S_EXT_CTRLS, &controls))
+	{
+		perror("error while setting controls");
+		m_isValid = false;
+		return 1;
+	}
+
+	return 0;
 }
 
 // get an encoded frame of data
