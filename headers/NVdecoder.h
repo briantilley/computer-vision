@@ -2,7 +2,7 @@
 #define NV_DECODER_H
 
 // wrapper for NVIDIA's C-style video decoder
-	// need a way to cleanly signal discontinuities
+// need a way to cleanly signal discontinuities
 
 #include <nvcuvid.h>
 #include "CodedFrame.h"
@@ -63,8 +63,12 @@ private:
 
 	// need to keep track for destruction of context lock
 	static int s_instanceCount;
-
 	static bool s_globalStateInitialized;
+
+	// callbacks for decoder
+	static int sequence_callback(void*, CUVIDEOFORMAT*);
+	static int decode_callback(void*, CUVIDPICPARAMS*);
+	static int output_callback(void*, CUVIDPARSERDISPINFO*);
 
 public:
 
@@ -76,26 +80,14 @@ public:
 	NVdecoder& operator=(const NVdecoder&) = delete;
 
 	// access (mutation happens inside class)
-	CUvideodecoder CUdecoder(void) { return m_decoderHandle; }
-	CUvideoparser CUparser(void) const { return m_parserHandle; }
-	CUvideoctxlock vidLock(void) const { return s_lock; }
 	unsigned videoWidth(void) const { return m_width; }
 	unsigned videoHeight(void) const { return m_height; }
 	bool empty() const { return m_currentDecodeGap <= 0; }
-	bool eosFlag() const { return m_eosFlag; }
 	int decodeGap() const { return m_currentDecodeGap; }
-
-	// mutation (not for use outside NVdecoder)
-	void setCUdecoder(CUvideodecoder decoder) { m_decoderHandle = decoder; }
-	void setVideoWidth(unsigned width) { m_width = width; }
-	void setVideoHeight(unsigned height) { m_height = height; }
-	void incrementDecodeGap(void) { m_currentDecodeGap++; }
-	void decrementDecodeGap(void) { m_currentDecodeGap--; }
 
 	// utilities
 	// too many calls to decodeFrame without popping the queue overflows GPU memory
 	int decodeFrame(const CodedFrame& frame);
-	void pushFrame(const GPUFrame& toPush) { m_outputQueue.push(toPush); } // not for use outside NVdecoder
 	void signalEndOfStream(void); // use this after sending the last decoded frame for the stream
 };
 

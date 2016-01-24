@@ -249,8 +249,9 @@ int CudaGLviewer::initGL()
 	// set window close callback
 	glfwSetWindowCloseCallback(m_GLFWwindow, cb_GLFWcloseWindow);
 
-	// // set keypress callback (revisit this when display works)
-	// glfwSetKeyCallback(m_GLFWwindow, cb_GLFWkeyEvent)
+	// set key callback only if a queue was given
+	if(m_pKeyEventQueue)
+		glfwSetKeyCallback(m_GLFWwindow, cb_GLFWkeyEvent);
 
 	// set framebuffer size callback
 	glfwSetFramebufferSizeCallback(m_GLFWwindow, cb_GLFWframebufferSize);
@@ -394,7 +395,7 @@ int CudaGLviewer::freeResources()
 	return 0;
 }
 
-CudaGLviewer::CudaGLviewer(unsigned imageWidth, unsigned imageHeight, std::string title): m_windowWidth(DEFAULT_WINDOW_WIDTH), m_windowHeight(DEFAULT_WINDOW_HEIGHT), m_imageWidth(imageWidth), m_imageHeight(imageHeight), m_windowTitle(title)
+CudaGLviewer::CudaGLviewer(unsigned imageWidth, unsigned imageHeight, std::string title, ConcurrentQueue<KeyEvent>* pKeyEventQueue): m_windowWidth(DEFAULT_WINDOW_WIDTH), m_windowHeight(DEFAULT_WINDOW_HEIGHT), m_imageWidth(imageWidth), m_imageHeight(imageHeight), m_windowTitle(title), m_pKeyEventQueue(pKeyEventQueue)
 {
 	// make sure global state is initialized
 	if(!s_globalStateInitialized)

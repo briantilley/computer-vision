@@ -59,6 +59,7 @@ public:
 	GPUFrame(): m_pitch(0), m_width(0), m_height(0), m_timestamp(0), m_endOfStream(false) { }
 
 	// make an entirely new allocation
+	// creating multiple instances from the same pointer = undefined behavior
 	GPUFrame(unsigned imageWidth, unsigned imageHeight, unsigned allocationCols, unsigned allocationRows,
 			 unsigned timestamp, bool eos=false): m_pitch(0), m_width(imageWidth), m_height(imageHeight), m_timestamp(timestamp), m_endOfStream(eos)
 	{
@@ -99,6 +100,9 @@ public:
 	unsigned width(void) const { return m_width; } // dimensions (in pixels) of the image
 	unsigned height(void) const { return m_height; } // ^
 	unsigned timestamp(void) const { return	m_timestamp; }; // capture time of frame
+
+	// time between frames
+	int operator-(const GPUFrame& right) const { return m_timestamp - right.m_timestamp; }
 };
 
 #endif

@@ -9,9 +9,8 @@
 
 #include <unistd.h>
 
-#define THREADED_VIEWER
 #define CUDA_PROFILING
-#define GL_VIEWER_UPDATE_INTERVAL 100
+#define GL_VIEWER_UPDATE_INTERVAL 1000
 
 using namespace std;
 
@@ -133,10 +132,6 @@ int main(int argc, char* argv[])
 	cudaErr(cudaGetDeviceProperties(&properties, cudaSecondaryDevice));
 	cout << "secondary CUDA device: " << properties.name << endl;
 
-	#ifdef THREADED_VIEWER
-		cout << "running OpenGL on multiple threads" << endl;
-	#endif
-
 	cout << endl;
 
 	// input/decode thread
@@ -168,38 +163,32 @@ int main(int argc, char* argv[])
 
 	postProcessThread = std::thread(threadPostProcess, std::ref(decodedQueue), std::ref(displayQueue));
 
-	// start the display thread
+	// display/input
 	CudaGLviewer::initGlobalState();
-	CudaGLviewer viewer(1920, 1080, "input");
+	ConcurrentQueue<KeyEvent> keyInputQueue;
+	KeyEvent currentEvent;
+	CudaGLviewer viewer(1920, 1080, "input", &keyInputQueue);
 
 	if(!viewer)
 		exit(EXIT_FAILURE);
 
-	#ifdef THREADED_VIEWER
-		displayThread = std::thread(threadDisplay, std::ref(viewer), std::ref(displayQueue));
-		while(webcam.isOn() && viewer)
-		{
-			CudaGLviewer::update();
-			usleep(GL_VIEWER_UPDATE_INTERVAL);
-		}
-	#else
-		GPUFrame displayFrame;
-		while(viewer)
-		{
-			displayQueue.pop(displayFrame);
+	displayThread = std::thread(threadDisplay, std::ref(viewer), std::ref(displayQueue));
+	while(webcam.isOn() && viewer)
+	{
+		CudaGLviewer::update();
 
-			if(!displayFrame.eos() && viewer)
-			{
-				viewer.drawFrame(displayFrame);
-			}
-			else
-			{
-				break;
-			}
+		// input handling
+		while(!keyInputQueue.empty())
+		{
+			// get the key event
+			keyInputQueue.pop(currentEvent);
 
-			CudaGLviewer::update();
+			// print contents to console
+			cout << endl << currentEvent.key << "|" << currentEvent.action << "|" << hex << currentEvent.modifiers << endl;
 		}
-	#endif
+
+		usleep(GL_VIEWER_UPDATE_INTERVAL);
+	}
 
 	// triggers all other threads to stop
 	webcam.streamOff();
@@ -211,9 +200,7 @@ int main(int argc, char* argv[])
 	inputDecodeThread.join();
 	postProcessThread.join();
 
-	#ifdef THREADED_VIEWER
-		displayThread.join();
-	#endif
+	displayThread.join();
 	
 	#ifdef CUDA_PROFILING
 		cudaProfilerStop();

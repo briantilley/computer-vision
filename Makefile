@@ -22,7 +22,7 @@ V4L2cam.o: headers/CodedFrame.h headers/V4L2cam.h
 
 NVdecoder.o: headers/constants.h headers/CodedFrame.h headers/GPUFrame.h headers/ConcurrentQueue.h headers/NVdecoder.h
 
-CudaGLviewer.o: headers/constants.h headers/CudaGLviewer.h headers/GPUFrame.h
+CudaGLviewer.o: headers/constants.h headers/CudaGLviewer.h headers/GPUFrame.h headers/ConcurrentQueue.h
 
 %.o: %.cpp
 	$(CPP) $< -c --std=gnu++11 -Og

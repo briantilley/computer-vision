@@ -8,7 +8,7 @@ extern unsigned cudaSecondaryDevice;
 // change callbacks to static methods and fix encapsulation issues
 
 // parser works on basis of callback functions
-int sequence_callback(void *pUserData, CUVIDEOFORMAT* pVidFmt)
+int NVdecoder::sequence_callback(void *pUserData, CUVIDEOFORMAT* pVidFmt)
 {
 	// stitch C API and C++ together
 	NVdecoder* pInstance = reinterpret_cast<NVdecoder*>(pUserData);
@@ -16,7 +16,7 @@ int sequence_callback(void *pUserData, CUVIDEOFORMAT* pVidFmt)
 	CUVIDDECODECREATEINFO dci;
 
 	// only create the decoder if it doesn't already exist
-	if(0 == pInstance->CUdecoder())
+	if(0 == pInstance->m_decoderHandle)
 	{
 		// use pVidFmt to fill packaged info
 		dci.ulWidth             = pVidFmt->coded_width;
@@ -39,7 +39,7 @@ int sequence_callback(void *pUserData, CUVIDEOFORMAT* pVidFmt)
 		dci.ulTargetHeight      = dci.display_area.bottom;
 		dci.ulNumOutputSurfaces = DEFAULT_OUTPUT_SURFACES;
 
-		dci.vidLock             = pInstance->vidLock(); // come back to this for multithreading
+		dci.vidLock             = pInstance->s_lock; // come back to this for multithreading
 		dci.target_rect.left    = 0;
 		dci.target_rect.top     = 0;
 		dci.target_rect.right   = dci.ulTargetWidth;
@@ -48,39 +48,37 @@ int sequence_callback(void *pUserData, CUVIDEOFORMAT* pVidFmt)
 		memset(dci.Reserved2, 0, sizeof(dci.Reserved2));
 
 		// create the decoder
-		CUvideodecoder tempDecoder;
-		cuErr(cuvidCreateDecoder(&tempDecoder, &dci));
-		pInstance->setCUdecoder(tempDecoder);
+		cuErr(cuvidCreateDecoder(&pInstance->m_decoderHandle, &dci));
 	}
 
 	// fill width and height of decoder
-	pInstance->setVideoWidth(pVidFmt->display_area.right);
-	pInstance->setVideoHeight(pVidFmt->display_area.bottom);
+	pInstance->m_width = pVidFmt->display_area.right;
+	pInstance->m_height = pVidFmt->display_area.bottom;
 
 	// return value of 1 indicates success
 	return 1;
 }
 
-int decode_callback(void *pUserData, CUVIDPICPARAMS* pPicParams)
+int NVdecoder::decode_callback(void *pUserData, CUVIDPICPARAMS* pPicParams)
 {
 	// stitch C API and C++ together
 	NVdecoder* pInstance = reinterpret_cast<NVdecoder*>(pUserData);
 
 	// make sure decoding only happens with a valid object
 	// fail if object is invalid
-	if(0 == pInstance->CUdecoder()) return 0;
+	if(0 == pInstance->m_decoderHandle) return 0;
 
 	// actually decode the frame
-	cuErr(cuvidDecodePicture(pInstance->CUdecoder(), pPicParams));
+	cuErr(cuvidDecodePicture(pInstance->m_decoderHandle, pPicParams));
 
-	pInstance->incrementDecodeGap();
+	pInstance->m_currentDecodeGap++;
 
 	// return value of 1 indicates success
 	return 1;
 }
 
 // output frames go into a queue
-int output_callback(void *pUserData, CUVIDPARSERDISPINFO* pParDispInfo)
+int NVdecoder::output_callback(void *pUserData, CUVIDPARSERDISPINFO* pParDispInfo)
 {
 	// stitch C API and C++ together
 	NVdecoder* pInstance = reinterpret_cast<NVdecoder*>(pUserData);
@@ -95,26 +93,26 @@ int output_callback(void *pUserData, CUVIDPARSERDISPINFO* pParDispInfo)
 
 	// make a GPUFrame object
 		// map output
-	cuErr(cuvidMapVideoFrame(pInstance->CUdecoder(), pParDispInfo->picture_index, &devPtr, &pitch, &trashParams));
+	cuErr(cuvidMapVideoFrame(pInstance->m_decoderHandle, pParDispInfo->picture_index, &devPtr, &pitch, &trashParams));
 		// construct GPUFrame
 		// height multiplier has to do with NV12 format
-	outputFrame = GPUFrame(devPtr, pitch, pInstance->videoWidth(), pInstance->videoHeight(), pInstance->videoWidth(), (pInstance->videoHeight() * 3 / 2), pParDispInfo->timestamp);
+	outputFrame = GPUFrame(devPtr, pitch, pInstance->m_width, pInstance->m_height, pInstance->m_width, (pInstance->m_height * 3 / 2), pParDispInfo->timestamp);
 		// unmap output
-	cuErr(cuvidUnmapVideoFrame(pInstance->CUdecoder(), devPtr));
+	cuErr(cuvidUnmapVideoFrame(pInstance->m_decoderHandle, devPtr));
 
 	// place into queue
-	pInstance->pushFrame(outputFrame);
+	pInstance->m_outputQueue.push(outputFrame);
 
 	// buffer has one less frame
-	pInstance->decrementDecodeGap();
+	pInstance->m_currentDecodeGap--;
 
 	// if stream end set
-	if(pInstance->eosFlag())
+	if(pInstance->m_eosFlag)
 	{
 		// buffers empty
-		if(0 >= pInstance->decodeGap())
+		if(0 >= pInstance->m_currentDecodeGap)
 		{
-			pInstance->pushFrame(GPUFrame(EOS()));
+			pInstance->m_outputQueue.push(GPUFrame(EOS()));
 		}
 	}
 

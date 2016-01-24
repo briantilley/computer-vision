@@ -32,6 +32,7 @@ public:
 	CodedFrame(void) { } // leave initialized as empty frame
 
 	// copy raw data and wrap in object
+	// creating multiple instances from the same pointer = undefined behavior
 	CodedFrame(const byte* _data, unsigned _length, unsigned _timestamp)
 	{
 		// make a copy
@@ -57,6 +58,9 @@ public:
 	unsigned size(void) const { return m_length; } // size of allocation
 	const byte* raw_data(void) const { return m_data.get(); } // immutable information contained
 	unsigned timestamp(void) const { return m_timestamp; } // capture time of frame
+
+	// time between frames
+	int operator-(const CodedFrame& right) const { return m_timestamp - right.m_timestamp; }
 };
 
 #endif

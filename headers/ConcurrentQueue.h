@@ -15,6 +15,9 @@
 template <typename T>
 class ConcurrentQueue
 {
+private:
+	const bool m_blank = false; // a "blank" queue is not meant to be used
+
 public:
 
 	T pop() 
@@ -59,8 +62,11 @@ public:
 	}
 
 	ConcurrentQueue()=default;
+	ConcurrentQueue(bool blank): m_blank(true) {  }
 	ConcurrentQueue(const ConcurrentQueue&) = delete;            // disable copying
 	ConcurrentQueue& operator=(const ConcurrentQueue&) = delete; // disable assignment
+
+	operator bool() const { return !m_blank; }
 	
 private:
 	std::queue<T> queue_;
