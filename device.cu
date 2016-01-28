@@ -43,33 +43,37 @@ void kernelNV12toRGBA(const void* const input, const unsigned pitchInput,
 {
 	// make sure we get the right data for clamping coords if necessary
 	if(clampCoords)
+	{
 		if(!(pixelsWidth && pixelsHeight))
 			return;
+	}
 
-	// dimensions of the grid
-	// (# of blocks) * (threads per block)
-	const unsigned gridHeight = gridDim.y * blockDim.y;
-	// const unsigned gridWidth = gridDim.x * blockDim.x; // not in use
+	// number of rows of threads in use
+	const unsigned gridWidth = gridDim.x * blockDim.x;
+	unsigned gridHeight;
+	if(clampCoords)
+		gridHeight = pixelsHeight;
+	else
+		gridHeight = gridDim.y * blockDim.y;
 
 	// position within the grid
 	// (threads per block) * (position of block in grid) + (position of thread in block)
 	const unsigned gridXidx = blockDim.x * blockIdx.x + threadIdx.x;
 	const unsigned gridYidx = blockDim.y * blockIdx.y + threadIdx.y;
 
+	if(clampCoords)
+	{
+		if(gridXidx * 8 >= pixelsWidth || gridYidx >= pixelsHeight)
+			return;
+	}
+
 	// NV12 global reads for 8 pixels of data
 	// address calculation from inner to outer access:
 	// convert to byte array, position to proper row,
 	// convert to row array, position to proper column
 	word packed_Y_bytes, packed_UV_bytes;
-	if(!clampCoords) // perfect grid size
-	{
-		packed_Y_bytes = reinterpret_cast<const word*>(static_cast<const byte*>(input) + gridYidx * pitchInput)[gridXidx];
-		packed_UV_bytes = reinterpret_cast<const word*>(static_cast<const byte*>(input) + (gridHeight + gridYidx / 2) * pitchInput)[gridXidx];
-	}
-	else // wasted threads in some blocks
-	{
-		// keep waste threads from reading
-	}
+	packed_Y_bytes = reinterpret_cast<const word*>(static_cast<const byte*>(input) + gridYidx * pitchInput)[gridXidx];
+	packed_UV_bytes = reinterpret_cast<const word*>(static_cast<const byte*>(input) + (gridHeight + gridYidx / 2) * pitchInput)[gridXidx];
 
 	// array representation of input data
 	const byte* const Y  = reinterpret_cast<const byte*>(&packed_Y_bytes);
@@ -77,7 +81,7 @@ void kernelNV12toRGBA(const void* const input, const unsigned pitchInput,
 
 	// local destination for conversion
 	word pixelPairs[4]; // pack into 4 2-pixel/8-byte pairs
-	byte* const pair_0_bytes = reinterpret_cast<byte*>(pixelPairs + 0);
+	byte* const pair_0_bytes = reinterpret_cast<byte*>(pixelPairs    );
 	byte* const pair_1_bytes = reinterpret_cast<byte*>(pixelPairs + 1);
 	byte* const pair_2_bytes = reinterpret_cast<byte*>(pixelPairs + 2);
 	byte* const pair_3_bytes = reinterpret_cast<byte*>(pixelPairs + 3);
@@ -96,7 +100,8 @@ void kernelNV12toRGBA(const void* const input, const unsigned pitchInput,
 	// strided global write of the RGBA data for 8 pixels,
 	// taking the hit on efficiency
 	word* const row = reinterpret_cast<word*>(static_cast<byte*>(output) + gridYidx * pitchOutput);
-	const unsigned firstColumn = 4 * gridXidx;
+	const unsigned firstColumn = 4 * gridXidx; 
+
 	row[firstColumn    ] = pixelPairs[0];
 	row[firstColumn + 1] = pixelPairs[1];
 	row[firstColumn + 2] = pixelPairs[2];
@@ -132,34 +137,42 @@ GPUFrame NV12toRGBA(GPUFrame& NV12input)
 // run conversion kernel with pre-allocated output memory
 // return 0 on success, anything else on failure
 // TODO: switch statement for common sizes and template call for ones needing padding
+#define BLOCK_WIDTH 16
+#define BLOCK_HEIGHT 8
 int NV12toRGBA(GPUFrame& NV12input, GPUFrame& RGBAoutput)
 {
-	// make sure the width divides nicely
-	if(0 == NV12input.width() % 16)
+	// make sure the width and height divide nicely
+	bool matchedWidth = !(NV12input.width() % (8 * BLOCK_WIDTH));
+	bool matchedHeight = !(NV12input.height() % BLOCK_HEIGHT);
+
+	if(matchedWidth && matchedHeight)
 	{
-		dim3 grid, block;
+		// dimensions for kernel launch
+		dim3 block(BLOCK_WIDTH, BLOCK_HEIGHT);
+		dim3 grid(NV12input.width() / (8 * block.x), NV12input.height() / block.y);
 
-		// make sure the height divides nicely
-		if(0 == NV12input.height() % 8)
-		{
-			// make dimension objects for kernel launch
-			grid = dim3(NV12input.width() / 128, NV12input.height() / 8);
-			block = dim3(16, 8);
+		kernelNV12toRGBA<false><<< grid, block >>>(NV12input.data(), NV12input.pitch(), RGBAoutput.data(), RGBAoutput.pitch());
 
-			kernelNV12toRGBA<<< grid, block >>>(NV12input.data(), NV12input.pitch(), RGBAoutput.data(), RGBAoutput.pitch());
-		}
-		else
-		{
-			std::cout << NV12input.height() << " % 8 != 0" << std::endl;
-			return 1; // failure
-		}
-
+		// sync and check for errors
 		cudaDeviceSynchronize(); cudaErr(cudaGetLastError());
 	}
 	else
 	{
-		std::cout << NV12input.width() << " % 16 != 0" << std::endl;
-		return 1; // failure
+		// dimensions for kernel launch
+		dim3 block(BLOCK_WIDTH, BLOCK_HEIGHT);
+		dim3 grid(NV12input.width() / (8 * block.x), NV12input.height() / block.y);
+
+		// add in a block of width and/or height to reach all pixels
+		if(!matchedWidth)
+			grid.x++;
+
+		if(!matchedHeight)
+			grid.y++;
+
+		kernelNV12toRGBA<true><<< grid, block >>>(NV12input.data(), NV12input.pitch(), RGBAoutput.data(), RGBAoutput.pitch(), RGBAoutput.width(), RGBAoutput.height());
+
+		// sync and check for errors
+		cudaDeviceSynchronize(); cudaErr(cudaGetLastError());
 	}
 
 	return 0; // success

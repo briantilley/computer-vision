@@ -11,6 +11,8 @@
 
 #define CUDA_PROFILING
 #define GL_VIEWER_UPDATE_INTERVAL 1000
+#define VIDEO_WIDTH 160
+#define VIDEO_HEIGHT 120
 
 using namespace std;
 
@@ -41,7 +43,7 @@ void threadInputDecode(V4L2cam& webcam, NVdecoder& decoder)
 		// passed when constructing 'decoder'
 		if(!inputFrame.empty())
 		{
-			cout << decoder.decodeGap() << " " << flush;
+			// cout << decoder.decodeGap() << " " << flush;
 			retrievedCount++;
 			decoder.decodeFrame(inputFrame);
 		}
@@ -74,7 +76,7 @@ void threadPostProcess(ConcurrentQueue<GPUFrame>& inputQueue, ConcurrentQueue<GP
 
 		if(!NV12input.eos()) // if stream isn't finished
 		{
-			// convert the frame and let it go to waste
+			// convert the frame
 			if(!NV12input.empty())
 			{
 				RGBAframe = NV12toRGBA(NV12input);
@@ -138,7 +140,7 @@ int main(int argc, char* argv[])
 	std::thread inputDecodeThread, postProcessThread, displayThread;
 
 	// camera
-	unsigned captureWidth = 1920, captureHeight = 1080;
+	unsigned captureWidth = VIDEO_WIDTH, captureHeight = VIDEO_HEIGHT;
 	V4L2cam webcam(string("/dev/video0"), h264, captureWidth, captureHeight);
 
 	if(!webcam)
@@ -167,12 +169,13 @@ int main(int argc, char* argv[])
 	CudaGLviewer::initGlobalState();
 	ConcurrentQueue<KeyEvent> keyInputQueue;
 	KeyEvent currentEvent;
-	CudaGLviewer viewer(1920, 1080, "input", &keyInputQueue);
+	CudaGLviewer viewer(captureWidth, captureHeight, "input", &keyInputQueue);
 
 	if(!viewer)
 		exit(EXIT_FAILURE);
 
 	displayThread = std::thread(threadDisplay, std::ref(viewer), std::ref(displayQueue));
+	bool autofocus;
 	while(webcam.isOn() && viewer)
 	{
 		CudaGLviewer::update();
@@ -187,28 +190,28 @@ int main(int argc, char* argv[])
 			{
 				switch(currentEvent.key)
 				{
-					case KEY_ARROW_UP;
+					case KEY_ARROW_UP:
 						webcam.changeControl(EXPOSURE, 5);
 					break;
 
 					case KEY_ARROW_DOWN:
 						webcam.changeControl(EXPOSURE, -5);
 					break;
-					
+
 					case KEY_F:
-						bool autofocus = webcam.getControl(AUTOFOCUS);
+						autofocus = webcam.getControl(AUTOFOCUS);
 						webcam.setControl(AUTOFOCUS, !autofocus);
 						cout << endl << "autofocus " << (!autofocus ? "on" : "off") << endl;
 					break;
-					
+
 					case KEY_R:
 						webcam.changeControl(FOCUS, 5);
 					break;
-					
+
 					case KEY_V:
 						webcam.changeControl(FOCUS, -5);
 					break;
-					
+
 				}
 			}
 		}

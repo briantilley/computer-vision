@@ -474,7 +474,7 @@ int CudaGLviewer::drawFrame(GPUFrame& inputCudaFrame)
 	unsigned sizeTexture = sizeof(GLubyte) * numColorValues;
 
 	// copy from output frame to array
-	cudaErr(cudaMemcpyToArray(m_cudaDestArray, 0, 0, inputCudaFrame.data(), sizeTexture, cudaMemcpyDeviceToDevice));
+	cudaErr(cudaMemcpy2DToArray(m_cudaDestArray, 0, 0, inputCudaFrame.data(), inputCudaFrame.pitch(), inputCudaFrame.width() * 4, inputCudaFrame.height(), cudaMemcpyDeviceToDevice));
 
 	// bind the vertex array
 	glBindVertexArray(m_vertexArray);

@@ -238,7 +238,6 @@ private:
 				event.key = KEY_V;
 			break;
 
-
 			default:
 				event.key = KEY_NONE;
 			break;

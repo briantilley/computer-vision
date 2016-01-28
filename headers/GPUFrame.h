@@ -96,7 +96,7 @@ public:
 	bool eos(void) const { return m_endOfStream; }
 
 	void* data(void) { return m_deviceData.get(); }; // pointer this is wrapped around
-	unsigned pitch(void) const { return static_cast<unsigned>(m_pitch); } // number of bytes between the start of one row and the next
+	size_t pitch(void) const { return /*static_cast<unsigned>*/(m_pitch); } // number of bytes between the start of one row and the next
 	unsigned width(void) const { return m_width; } // dimensions (in pixels) of the image
 	unsigned height(void) const { return m_height; } // ^
 	unsigned timestamp(void) const { return	m_timestamp; }; // capture time of frame
