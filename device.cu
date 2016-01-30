@@ -153,48 +153,48 @@ void kernelMatrixConvolution(const void* const input, const unsigned pitchInput,
 	}
 }
 
-// sum of magnitudes of A and B treated as legs of a right triangle
-// should be 2 pixels per thread
+// magnitude of sum of A and B treated as orthogonal axis-aligned vectors
+#define VEC_SUM_GRID_STRIDE_COUNT 8 // number of sections the image is processed in
 __global__
 void kernelVectorSum(const void* const inputA, const unsigned pitchInputA,
 					 const void* const inputB, const unsigned pitchInputB,
 					 void* const output, const unsigned pitchOutput,
 					 const unsigned pixelsWidth, const unsigned pixelsHeight)
 {
-	const unsigned gridWidth = gridDim.x * blockDim.x;
+	// const unsigned gridWidth = gridDim.x * blockDim.x;
+	const unsigned activeGridWidth = pixelsWidth / (2 * VEC_SUM_GRID_STRIDE_COUNT);
 
 	// indices of each thread
 	const unsigned gridXidx = blockIdx.x * blockDim.x + threadIdx.x;
 	const unsigned gridYidx = blockIdx.y * blockDim.y + threadIdx.y;
 
 	// kill threads that are out of bounds
-	if(/*gridXidx * 2 >= pixelsWidth || */gridYidx >= pixelsHeight)
+	if(gridXidx >= activeGridWidth || gridYidx >= pixelsHeight)
 		return;
 
 	// destinations for packed data
 	word inputApixels = 0, inputBpixels = 0, outputCpixels = 0;
 
-	// read
-	inputApixels = reinterpret_cast<const word*>(static_cast<const byte*>(inputA) + gridYidx * pitchInputA)[gridXidx];
-	inputBpixels = reinterpret_cast<const word*>(static_cast<const byte*>(inputB) + gridYidx * pitchInputB)[gridXidx];
-
-	if(gridXidx >= gridWidth / 2)
+	// work on the image in 2 parts with half as many threads
+	#pragma unroll
+	for(int i = 0; i < VEC_SUM_GRID_STRIDE_COUNT; ++i)
 	{
-		// inputApixels = 0xffffffffffffffff;
-		// inputBpixels = 0xffffffffffffffff;
+		// read
+		inputApixels = reinterpret_cast<const word*>(static_cast<const byte*>(inputA) + gridYidx * pitchInputA)[i * activeGridWidth + gridXidx];
+		inputBpixels = reinterpret_cast<const word*>(static_cast<const byte*>(inputB) + gridYidx * pitchInputB)[i * activeGridWidth + gridXidx];
+
+		// store the vector magnitude of each component
+		reinterpret_cast<byte*>(&outputCpixels)[0] = sqrt(static_cast<float>(reinterpret_cast<byte*>(&inputApixels)[0]) * reinterpret_cast<byte*>(&inputApixels)[0] + static_cast<float>(reinterpret_cast<byte*>(&inputBpixels)[0]) * reinterpret_cast<byte*>(&inputBpixels)[0]);
+		reinterpret_cast<byte*>(&outputCpixels)[1] = sqrt(static_cast<float>(reinterpret_cast<byte*>(&inputApixels)[1]) * reinterpret_cast<byte*>(&inputApixels)[1] + static_cast<float>(reinterpret_cast<byte*>(&inputBpixels)[1]) * reinterpret_cast<byte*>(&inputBpixels)[1]);
+		reinterpret_cast<byte*>(&outputCpixels)[2] = sqrt(static_cast<float>(reinterpret_cast<byte*>(&inputApixels)[2]) * reinterpret_cast<byte*>(&inputApixels)[2] + static_cast<float>(reinterpret_cast<byte*>(&inputBpixels)[2]) * reinterpret_cast<byte*>(&inputBpixels)[2]);
+
+		reinterpret_cast<byte*>(&outputCpixels)[4] = sqrt(static_cast<float>(reinterpret_cast<byte*>(&inputApixels)[4]) * reinterpret_cast<byte*>(&inputApixels)[4] + static_cast<float>(reinterpret_cast<byte*>(&inputBpixels)[4]) * reinterpret_cast<byte*>(&inputBpixels)[4]);
+		reinterpret_cast<byte*>(&outputCpixels)[5] = sqrt(static_cast<float>(reinterpret_cast<byte*>(&inputApixels)[5]) * reinterpret_cast<byte*>(&inputApixels)[5] + static_cast<float>(reinterpret_cast<byte*>(&inputBpixels)[5]) * reinterpret_cast<byte*>(&inputBpixels)[5]);
+		reinterpret_cast<byte*>(&outputCpixels)[6] = sqrt(static_cast<float>(reinterpret_cast<byte*>(&inputApixels)[6]) * reinterpret_cast<byte*>(&inputApixels)[6] + static_cast<float>(reinterpret_cast<byte*>(&inputBpixels)[6]) * reinterpret_cast<byte*>(&inputBpixels)[6]);
+
+		// write
+		reinterpret_cast<word*>(static_cast<byte*>(output) + gridYidx * pitchOutput)[i * activeGridWidth + gridXidx] = outputCpixels;
 	}
-
-	// store the vector magnitude of each component
-	reinterpret_cast<byte*>(&outputCpixels)[0] = sqrt(static_cast<float>(reinterpret_cast<const byte*>(&inputApixels)[0]) * reinterpret_cast<const byte*>(&inputApixels)[0] + static_cast<float>(reinterpret_cast<const byte*>(&inputBpixels)[0]) * reinterpret_cast<const byte*>(&inputBpixels)[0]);
-	reinterpret_cast<byte*>(&outputCpixels)[1] = sqrt(static_cast<float>(reinterpret_cast<const byte*>(&inputApixels)[1]) * reinterpret_cast<const byte*>(&inputApixels)[1] + static_cast<float>(reinterpret_cast<const byte*>(&inputBpixels)[1]) * reinterpret_cast<const byte*>(&inputBpixels)[1]);
-	reinterpret_cast<byte*>(&outputCpixels)[2] = sqrt(static_cast<float>(reinterpret_cast<const byte*>(&inputApixels)[2]) * reinterpret_cast<const byte*>(&inputApixels)[2] + static_cast<float>(reinterpret_cast<const byte*>(&inputBpixels)[2]) * reinterpret_cast<const byte*>(&inputBpixels)[2]);
-
-	reinterpret_cast<byte*>(&outputCpixels)[4] = sqrt(static_cast<float>(reinterpret_cast<const byte*>(&inputApixels)[4]) * reinterpret_cast<const byte*>(&inputApixels)[4] + static_cast<float>(reinterpret_cast<const byte*>(&inputBpixels)[4]) * reinterpret_cast<const byte*>(&inputBpixels)[4]);
-	reinterpret_cast<byte*>(&outputCpixels)[5] = sqrt(static_cast<float>(reinterpret_cast<const byte*>(&inputApixels)[5]) * reinterpret_cast<const byte*>(&inputApixels)[5] + static_cast<float>(reinterpret_cast<const byte*>(&inputBpixels)[5]) * reinterpret_cast<const byte*>(&inputBpixels)[5]);
-	reinterpret_cast<byte*>(&outputCpixels)[6] = sqrt(static_cast<float>(reinterpret_cast<const byte*>(&inputApixels)[6]) * reinterpret_cast<const byte*>(&inputApixels)[6] + static_cast<float>(reinterpret_cast<const byte*>(&inputBpixels)[6]) * reinterpret_cast<const byte*>(&inputBpixels)[6]);
-
-	// write
-	reinterpret_cast<word*>(static_cast<byte*>(output) + gridYidx * pitchOutput)[gridXidx] = outputCpixels;
 }
 
 // (maybe) when this works, modify it to push to a ConcurrentQueue<GPUFrame>
@@ -319,27 +319,37 @@ int sobelFilter(GPUFrame& image, GPUFrame& edges)
 
 	// figure out dimensions
 	dim3 grid, block(BLOCK_WIDTH, BLOCK_HEIGHT);
-	grid.x = image.width() / (1 * block.x);
+	grid.x = image.width() / block.x;
 	grid.y = image.height() / block.y;
 
-	if(image.width() % (1 * block.x))
+	if(image.width() % block.x)
 		grid.x++;
 
 	if(image.height() % block.y)
 		grid.y++;
 
+	// shared memory size
+	unsigned sharedSpaceSize = 0;
+	sharedSpaceSize += (4 + 2 * block.x) * (2 + block.y) * 4; // pixel data
+	sharedSpaceSize += 3 * 3 * sizeof(float); // convolution matrix
+
 	// launch convolution kernel with sobel matrix
-	kernelMatrixConvolution<<< grid, block >>>(image.data(), image.pitch(),
+	kernelMatrixConvolution<<< grid, block, sharedSpaceSize >>>(image.data(), image.pitch(),
 											   sobelX.data(), sobelX.pitch(),
 											   image.width(), image.height(),
 											   sobelXFilter,
 											   3, 3);
 
-	kernelMatrixConvolution<<< grid, block >>>(image.data(), image.pitch(),
+	kernelMatrixConvolution<<< grid, block, sharedSpaceSize >>>(image.data(), image.pitch(),
 											   sobelY.data(), sobelY.pitch(),
 											   image.width(), image.height(),
 											   sobelYFilter,
 											   3, 3);
+
+	// width of the grid must change for vector sum
+	grid.x = image.width() / (2 * VEC_SUM_GRID_STRIDE_COUNT * block.x);
+	if(0 != image.width() % (2 * VEC_SUM_GRID_STRIDE_COUNT * block.x))
+		grid.x++;
 
 	// vector sum of both sobel images
 	kernelVectorSum<<< grid, block >>>(sobelX.data(), sobelX.pitch(),
