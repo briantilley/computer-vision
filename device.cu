@@ -48,8 +48,8 @@ void kernelNV12toRGBA(const void* const input, const unsigned pitchInput,
 			return;
 	}
 
-	// number of rows of threads in use
-	const unsigned gridWidth = gridDim.x * blockDim.x;
+	// // number of rows of threads in use
+	// const unsigned gridWidth = gridDim.x * blockDim.x;
 	unsigned gridHeight;
 	if(clampCoords)
 		gridHeight = pixelsHeight;
@@ -160,29 +160,34 @@ void kernelVectorSum(const void* const inputA, const unsigned pitchInputA,
 					 void* const output, const unsigned pitchOutput,
 					 const unsigned pixelsWidth, const unsigned pixelsHeight)
 {
-	// // dimensions of the grid
-	// const unsigned gridWidth = gridDim.x * blockDim.x;
-	// const unsigned gridHeight = gridDim.y * blockDim.y;
+	const unsigned gridWidth = gridDim.x * blockDim.x;
 
 	// indices of each thread
 	const unsigned gridXidx = blockIdx.x * blockDim.x + threadIdx.x;
 	const unsigned gridYidx = blockIdx.y * blockDim.y + threadIdx.y;
 
 	// kill threads that are out of bounds
-	if(gridXidx >= pixelsWidth || gridYidx >= pixelsHeight)
+	if(gridXidx * 2 >= pixelsWidth || gridYidx >= pixelsHeight)
 		return;
 
-	byte inputAval = 0, inputBval = 0, outputCval = 0;
+	// destinations for packed data
+	word inputApixels = 0, inputBpixels = 0, outputCpixels = 0;
 
-	for(int colorElement = 0; colorElement < 3; ++colorElement)
-	{
-		inputAval = static_cast<const byte*>(inputA)[gridYidx * pitchInputA + gridXidx * 4 + colorElement];
-		inputBval = static_cast<const byte*>(inputB)[gridYidx * pitchInputB + gridXidx * 4 + colorElement];
+	// read
+	inputApixels = reinterpret_cast<const word*>(static_cast<const byte*>(inputA) + gridYidx * pitchInputA)[gridXidx];
+	inputBpixels = reinterpret_cast<const word*>(static_cast<const byte*>(inputB) + gridYidx * pitchInputB)[gridXidx];
 
-		outputCval = sqrt(static_cast<float>(inputAval) * inputAval + inputBval * inputBval);
+	// store the vector magnitude of each component
+	reinterpret_cast<byte*>(&outputCpixels)[0] = sqrt(static_cast<float>(reinterpret_cast<const byte*>(&inputApixels)[0]) * reinterpret_cast<const byte*>(&inputApixels)[0] + static_cast<float>(reinterpret_cast<const byte*>(&inputBpixels)[0]) * reinterpret_cast<const byte*>(&inputBpixels)[0]);
+	reinterpret_cast<byte*>(&outputCpixels)[1] = sqrt(static_cast<float>(reinterpret_cast<const byte*>(&inputApixels)[1]) * reinterpret_cast<const byte*>(&inputApixels)[1] + static_cast<float>(reinterpret_cast<const byte*>(&inputBpixels)[1]) * reinterpret_cast<const byte*>(&inputBpixels)[1]);
+	reinterpret_cast<byte*>(&outputCpixels)[2] = sqrt(static_cast<float>(reinterpret_cast<const byte*>(&inputApixels)[2]) * reinterpret_cast<const byte*>(&inputApixels)[2] + static_cast<float>(reinterpret_cast<const byte*>(&inputBpixels)[2]) * reinterpret_cast<const byte*>(&inputBpixels)[2]);
 
-		static_cast<byte*>(output)[gridYidx * pitchOutput + gridXidx * 4 + colorElement] = outputCval;
-	}
+	reinterpret_cast<byte*>(&outputCpixels)[4] = sqrt(static_cast<float>(reinterpret_cast<const byte*>(&inputApixels)[4]) * reinterpret_cast<const byte*>(&inputApixels)[4] + static_cast<float>(reinterpret_cast<const byte*>(&inputBpixels)[4]) * reinterpret_cast<const byte*>(&inputBpixels)[4]);
+	reinterpret_cast<byte*>(&outputCpixels)[5] = sqrt(static_cast<float>(reinterpret_cast<const byte*>(&inputApixels)[5]) * reinterpret_cast<const byte*>(&inputApixels)[5] + static_cast<float>(reinterpret_cast<const byte*>(&inputBpixels)[5]) * reinterpret_cast<const byte*>(&inputBpixels)[5]);
+	reinterpret_cast<byte*>(&outputCpixels)[6] = sqrt(static_cast<float>(reinterpret_cast<const byte*>(&inputApixels)[6]) * reinterpret_cast<const byte*>(&inputApixels)[6] + static_cast<float>(reinterpret_cast<const byte*>(&inputBpixels)[6]) * reinterpret_cast<const byte*>(&inputBpixels)[6]);
+
+	// write
+	reinterpret_cast<word*>(static_cast<byte*>(output) + gridYidx * pitchOutput)[gridXidx] = outputCpixels;
 }
 
 // (maybe) when this works, modify it to push to a ConcurrentQueue<GPUFrame>
@@ -304,14 +309,16 @@ int sobelFilter(GPUFrame& image, GPUFrame& edges)
 
 	// figure out dimensions
 	dim3 grid, block(BLOCK_HEIGHT, BLOCK_WIDTH);
-	grid.x = image.width() / block.x;
+	grid.x = image.width() / (2 * block.x);
 	grid.y = image.height() / block.y;
 
-	if(image.width() % block.x)
+	if(image.width() % (2 * block.x))
 		grid.x++;
 
 	if(image.height() % block.y)
 		grid.y++;
+
+	std::cout << "grid: " << grid.x * block.x << " x " << grid.y * block.y << " threads" << std::endl;
 
 	// launch convolution kernel with sobel matrix
 	kernelMatrixConvolution<<< grid, block >>>(image.data(), image.pitch(), sobelX.data(), sobelX.pitch(), image.width(), image.height(), sobelXFilter, 3, 3);

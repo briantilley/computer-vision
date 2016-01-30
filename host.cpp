@@ -9,7 +9,7 @@
 
 #include <unistd.h>
 
-#define CUDA_PROFILING
+// #define CUDA_PROFILING
 #define GL_VIEWER_UPDATE_INTERVAL 1000
 #define VIDEO_WIDTH 160
 #define VIDEO_HEIGHT 120
@@ -187,7 +187,7 @@ int main(int argc, char* argv[])
 	ConcurrentQueue<KeyEvent> keyInputQueue;
 	KeyEvent currentEvent;
 	CudaGLviewer inputViewer(captureWidth, captureHeight, "input", &keyInputQueue);
-	CudaGLviewer outputViewer(captureWidth, captureHeight, "output");
+	CudaGLviewer outputViewer(captureWidth, captureHeight, "output", &keyInputQueue);
 
 	if(!inputViewer || !outputViewer)
 		exit(EXIT_FAILURE);
