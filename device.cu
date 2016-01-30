@@ -154,6 +154,7 @@ void kernelMatrixConvolution(const void* const input, const unsigned pitchInput,
 }
 
 // sum of magnitudes of A and B treated as legs of a right triangle
+// should be 2 pixels per thread
 __global__
 void kernelVectorSum(const void* const inputA, const unsigned pitchInputA,
 					 const void* const inputB, const unsigned pitchInputB,
@@ -167,7 +168,7 @@ void kernelVectorSum(const void* const inputA, const unsigned pitchInputA,
 	const unsigned gridYidx = blockIdx.y * blockDim.y + threadIdx.y;
 
 	// kill threads that are out of bounds
-	if(gridXidx * 2 >= pixelsWidth || gridYidx >= pixelsHeight)
+	if(/*gridXidx * 2 >= pixelsWidth || */gridYidx >= pixelsHeight)
 		return;
 
 	// destinations for packed data
@@ -176,6 +177,12 @@ void kernelVectorSum(const void* const inputA, const unsigned pitchInputA,
 	// read
 	inputApixels = reinterpret_cast<const word*>(static_cast<const byte*>(inputA) + gridYidx * pitchInputA)[gridXidx];
 	inputBpixels = reinterpret_cast<const word*>(static_cast<const byte*>(inputB) + gridYidx * pitchInputB)[gridXidx];
+
+	if(gridXidx >= gridWidth / 2)
+	{
+		// inputApixels = 0xffffffffffffffff;
+		// inputBpixels = 0xffffffffffffffff;
+	}
 
 	// store the vector magnitude of each component
 	reinterpret_cast<byte*>(&outputCpixels)[0] = sqrt(static_cast<float>(reinterpret_cast<const byte*>(&inputApixels)[0]) * reinterpret_cast<const byte*>(&inputApixels)[0] + static_cast<float>(reinterpret_cast<const byte*>(&inputBpixels)[0]) * reinterpret_cast<const byte*>(&inputBpixels)[0]);
@@ -233,7 +240,8 @@ int NV12toRGBA(GPUFrame& NV12input, GPUFrame& RGBAoutput)
 		dim3 block(BLOCK_WIDTH, BLOCK_HEIGHT);
 		dim3 grid(NV12input.width() / (8 * block.x), NV12input.height() / block.y);
 
-		kernelNV12toRGBA<false><<< grid, block >>>(NV12input.data(), NV12input.pitch(), RGBAoutput.data(), RGBAoutput.pitch());
+		kernelNV12toRGBA<false><<< grid, block >>>(NV12input.data(), NV12input.pitch(),
+												   RGBAoutput.data(), RGBAoutput.pitch());
 
 		// sync and check for errors
 		cudaDeviceSynchronize(); cudaErr(cudaGetLastError());
@@ -251,7 +259,9 @@ int NV12toRGBA(GPUFrame& NV12input, GPUFrame& RGBAoutput)
 		if(!matchedHeight)
 			grid.y++;
 
-		kernelNV12toRGBA<true><<< grid, block >>>(NV12input.data(), NV12input.pitch(), RGBAoutput.data(), RGBAoutput.pitch(), RGBAoutput.width(), RGBAoutput.height());
+		kernelNV12toRGBA<true><<< grid, block >>>(NV12input.data(), NV12input.pitch(),
+												  RGBAoutput.data(), RGBAoutput.pitch(),
+												  RGBAoutput.width(), RGBAoutput.height());
 
 		// sync and check for errors
 		cudaDeviceSynchronize(); cudaErr(cudaGetLastError());
@@ -304,28 +314,38 @@ int sobelFilter(GPUFrame& image, GPUFrame& edges)
 		cudaErr(cudaMemcpy(sobelYFilter, hostSobelYFilter, 9 * sizeof(float), cudaMemcpyHostToDevice));
 	}
 
-	static GPUFrame sobelX(image.width(), image.height(), 4 * image.width(), image.height(), image.timestamp());
-	static GPUFrame sobelY(image.width(), image.height(), 4 * image.width(), image.height(), image.timestamp());
+	static GPUFrame sobelX(image.width(), image.height(), 4 * image.width(), image.height(), 0);
+	static GPUFrame sobelY(image.width(), image.height(), 4 * image.width(), image.height(), 0);
 
 	// figure out dimensions
-	dim3 grid, block(BLOCK_HEIGHT, BLOCK_WIDTH);
-	grid.x = image.width() / (2 * block.x);
+	dim3 grid, block(BLOCK_WIDTH, BLOCK_HEIGHT);
+	grid.x = image.width() / (1 * block.x);
 	grid.y = image.height() / block.y;
 
-	if(image.width() % (2 * block.x))
+	if(image.width() % (1 * block.x))
 		grid.x++;
 
 	if(image.height() % block.y)
 		grid.y++;
 
-	std::cout << "grid: " << grid.x * block.x << " x " << grid.y * block.y << " threads" << std::endl;
-
 	// launch convolution kernel with sobel matrix
-	kernelMatrixConvolution<<< grid, block >>>(image.data(), image.pitch(), sobelX.data(), sobelX.pitch(), image.width(), image.height(), sobelXFilter, 3, 3);
-	kernelMatrixConvolution<<< grid, block >>>(image.data(), image.pitch(), sobelY.data(), sobelY.pitch(), image.width(), image.height(), sobelYFilter, 3, 3);
+	kernelMatrixConvolution<<< grid, block >>>(image.data(), image.pitch(),
+											   sobelX.data(), sobelX.pitch(),
+											   image.width(), image.height(),
+											   sobelXFilter,
+											   3, 3);
+
+	kernelMatrixConvolution<<< grid, block >>>(image.data(), image.pitch(),
+											   sobelY.data(), sobelY.pitch(),
+											   image.width(), image.height(),
+											   sobelYFilter,
+											   3, 3);
 
 	// vector sum of both sobel images
-	kernelVectorSum<<< grid, block >>>(sobelX.data(), sobelX.pitch(), sobelY.data(), sobelY.pitch(), edges.data(), edges.pitch(), image.width(), image.height());
+	kernelVectorSum<<< grid, block >>>(sobelX.data(), sobelX.pitch(),
+									   sobelY.data(), sobelY.pitch(),
+									   edges.data(), edges.pitch(),
+									   image.width(), image.height());
 
 	// sync and check for errors
 	cudaDeviceSynchronize(); cudaErr(cudaGetLastError());
