@@ -29,4 +29,7 @@ typedef uint64_t word; // optimal reads are 64 bits
 GPUFrame NV12toRGBA(GPUFrame& NV12input); 
 int NV12toRGBA(GPUFrame& NV12input, GPUFrame& RGBAoutput);
 
+GPUFrame sobelFilter(GPUFrame& image);
+int sobelFilter(GPUFrame& image, GPUFrame& edges);
+
 #endif

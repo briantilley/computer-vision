@@ -430,6 +430,9 @@ CudaGLviewer::CudaGLviewer(unsigned imageWidth, unsigned imageHeight, std::strin
 		return;
 	}
 
+	// set texture coordinates without a size update
+	cb_GLFWframebufferSize(m_GLFWwindow, m_windowWidth, m_windowHeight);
+
 	m_isValid = true;
 }
 

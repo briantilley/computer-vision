@@ -38,8 +38,8 @@ inline void YUVtoRGBA(const byte& Y, const byte& U, const byte& V, byte& R, byte
 template<bool clampCoords=false>
 __global__
 void kernelNV12toRGBA(const void* const input, const unsigned pitchInput,
-					 void* const output, const unsigned pitchOutput,
-					 const unsigned pixelsWidth=0, const unsigned pixelsHeight=0)
+					  void* const output, const unsigned pitchOutput,
+					  const unsigned pixelsWidth=0, const unsigned pixelsHeight=0)
 {
 	// make sure we get the right data for clamping coords if necessary
 	if(clampCoords)
@@ -106,6 +106,83 @@ void kernelNV12toRGBA(const void* const input, const unsigned pitchInput,
 	row[firstColumn + 1] = pixelPairs[1];
 	row[firstColumn + 2] = pixelPairs[2];
 	row[firstColumn + 3] = pixelPairs[3];
+}
+
+// wil be 8 pixels per thread, load 2 at a time with grid-strided reads
+// arrange read and write such that the one memory location can be used
+// kernel must be given normalized convolution matrices of odd width and height
+__global__
+void kernelMatrixConvolution(const void* const input, const unsigned pitchInput,
+							 void* const output, const unsigned pitchOutput,
+							 const unsigned pixelsWidth, const unsigned pixelsHeight,
+							 const float* const filterMatrix,
+							 const unsigned filterMatrixWidth, const unsigned filterMatrixHeight)
+{
+	// // dimensions of the grid
+	// const unsigned gridWidth = gridDim.x * blockDim.x;
+	// const unsigned gridHeight = gridDim.y * blockDim.y;
+
+	// indices of each thread
+	const unsigned gridXidx = blockIdx.x * blockDim.x + threadIdx.x;
+	const unsigned gridYidx = blockIdx.y * blockDim.y + threadIdx.y;
+
+	// kill threads that are out of bounds
+	if(gridXidx >= pixelsWidth || gridYidx >= pixelsHeight)
+		return;
+
+	int newVal = 0; // new RGBA values for the two pixels
+	float readVal = 0; // two pixels read from input
+
+	const int firstRow = gridYidx - filterMatrixHeight / 2;
+	const int firstColumn = gridXidx - filterMatrixWidth / 2;
+
+	for(int colorElement = 0; colorElement < 3; ++colorElement)
+	{
+		newVal = 0;
+
+		for(int i = 0; i < filterMatrixHeight; ++i)
+		{
+			for(int j = 0; j < filterMatrixWidth; ++j)
+			{
+				readVal = static_cast<const byte*>(input)[min(max(firstRow + i, 0), pixelsHeight - 1) * pitchInput + min(max(firstColumn + j, 0), pixelsWidth - 1) * 4 + colorElement];
+				newVal += readVal * filterMatrix[i * filterMatrixWidth + j] + 0.5f;
+			}
+		}
+
+		static_cast<byte*>(output)[gridYidx * pitchOutput + gridXidx * 4 + colorElement] = min(min(newVal, 0), 255);
+	}
+}
+
+// sum of magnitudes of A and B treated as legs of a right triangle
+__global__
+void kernelVectorSum(const void* const inputA, const unsigned pitchInputA,
+					 const void* const inputB, const unsigned pitchInputB,
+					 void* const output, const unsigned pitchOutput,
+					 const unsigned pixelsWidth, const unsigned pixelsHeight)
+{
+	// // dimensions of the grid
+	// const unsigned gridWidth = gridDim.x * blockDim.x;
+	// const unsigned gridHeight = gridDim.y * blockDim.y;
+
+	// indices of each thread
+	const unsigned gridXidx = blockIdx.x * blockDim.x + threadIdx.x;
+	const unsigned gridYidx = blockIdx.y * blockDim.y + threadIdx.y;
+
+	// kill threads that are out of bounds
+	if(gridXidx >= pixelsWidth || gridYidx >= pixelsHeight)
+		return;
+
+	byte inputAval = 0, inputBval = 0, outputCval = 0;
+
+	for(int colorElement = 0; colorElement < 3; ++colorElement)
+	{
+		inputAval = static_cast<const byte*>(inputA)[gridYidx * pitchInputA + gridXidx * 4 + colorElement];
+		inputBval = static_cast<const byte*>(inputB)[gridYidx * pitchInputB + gridXidx * 4 + colorElement];
+
+		outputCval = sqrt(static_cast<float>(inputAval) * inputAval + inputBval * inputBval);
+
+		static_cast<byte*>(output)[gridYidx * pitchOutput + gridXidx * 4 + colorElement] = outputCval;
+	}
 }
 
 // (maybe) when this works, modify it to push to a ConcurrentQueue<GPUFrame>
@@ -176,4 +253,76 @@ int NV12toRGBA(GPUFrame& NV12input, GPUFrame& RGBAoutput)
 	}
 
 	return 0; // success
+}
+
+// allocate for and run the sobel filter
+GPUFrame sobelFilter(GPUFrame& image)
+{
+	// reference for the new frame
+	GPUFrame allocatedFrame;
+
+	// make an object for the output image
+	unsigned allocationRows = image.height();
+	unsigned allocationCols = 4 * image.width();
+
+	// make the actual memory allocation
+	allocatedFrame = GPUFrame(image.width(), image.height(), allocationCols, allocationRows, image.timestamp());
+
+	if(0 == sobelFilter(image, allocatedFrame))
+	{
+		// original success indicator
+		return allocatedFrame;
+	}
+	else
+	{
+		// original failure indicator
+		return GPUFrame();
+	}
+}
+
+// launch sobel filter kernel
+int sobelFilter(GPUFrame& image, GPUFrame& edges)
+{
+	// keep static device pointer to normalized sobel
+	// convolution filter and generate if first call
+	static float hostSobelXFilter[] = {-1.f/8, 0.f, 1.f/8, -2.f/8, 0.f, 2.f/8, -1.f/8, 0.f, 1.f/8};
+	static float* sobelXFilter = nullptr;
+	static float hostSobelYFilter[] = {-1.f/8, -2.f/8, -1.f/8, 0, 0, 0, 1.f/8, 2.f/8, 1.f/8};
+	static float* sobelYFilter = nullptr;
+
+	if(nullptr == sobelXFilter)
+	{
+		cudaErr(cudaMalloc(&sobelXFilter, 9 * sizeof(float)));
+		cudaErr(cudaMemcpy(sobelXFilter, hostSobelXFilter, 9 * sizeof(float), cudaMemcpyHostToDevice));
+
+		cudaErr(cudaMalloc(&sobelYFilter, 9 * sizeof(float)));
+		cudaErr(cudaMemcpy(sobelYFilter, hostSobelYFilter, 9 * sizeof(float), cudaMemcpyHostToDevice));
+	}
+
+	static GPUFrame sobelX(image.width(), image.height(), 4 * image.width(), image.height(), image.timestamp());
+	static GPUFrame sobelY(image.width(), image.height(), 4 * image.width(), image.height(), image.timestamp());
+
+	// figure out dimensions
+	dim3 grid, block(BLOCK_HEIGHT, BLOCK_WIDTH);
+	grid.x = image.width() / block.x;
+	grid.y = image.height() / block.y;
+
+	if(image.width() % block.x)
+		grid.x++;
+
+	if(image.height() % block.y)
+		grid.y++;
+
+	// launch convolution kernel with sobel matrix
+	kernelMatrixConvolution<<< grid, block >>>(image.data(), image.pitch(), sobelX.data(), sobelX.pitch(), image.width(), image.height(), sobelXFilter, 3, 3);
+	kernelMatrixConvolution<<< grid, block >>>(image.data(), image.pitch(), sobelY.data(), sobelY.pitch(), image.width(), image.height(), sobelYFilter, 3, 3);
+
+	// vector sum of both sobel images
+	kernelVectorSum<<< grid, block >>>(sobelX.data(), sobelX.pitch(), sobelY.data(), sobelY.pitch(), edges.data(), edges.pitch(), image.width(), image.height());
+
+	// sync and check for errors
+	cudaDeviceSynchronize(); cudaErr(cudaGetLastError());
+
+	// success
+	return 0;
 }

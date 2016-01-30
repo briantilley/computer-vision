@@ -43,13 +43,17 @@ void threadInputDecode(V4L2cam& webcam, NVdecoder& decoder)
 		// passed when constructing 'decoder'
 		if(!inputFrame.empty())
 		{
-			// cout << decoder.decodeGap() << " " << flush;
-			retrievedCount++;
+			#ifdef CUDA_PROFILING
+				retrievedCount++;
+			#endif
+
 			decoder.decodeFrame(inputFrame);
 		}
 
-		// if(gFramesToProcess <= retrievedCount)
-		// 	webcam.streamOff();
+		#ifdef CUDA_PROFILING
+			if(gFramesToProcess <= retrievedCount)
+				webcam.streamOff();
+		#endif
 	}
 	cout << endl;
 
@@ -60,10 +64,10 @@ void threadInputDecode(V4L2cam& webcam, NVdecoder& decoder)
 }
 
 // takes decoded input from the queue and decodes with CUDA functions
-void threadPostProcess(ConcurrentQueue<GPUFrame>& inputQueue, ConcurrentQueue<GPUFrame>& displayQueue)
+void threadPostProcess(ConcurrentQueue<GPUFrame>& inputQueue, ConcurrentQueue<GPUFrame>& inputDisplayQueue,  ConcurrentQueue<GPUFrame>& outputDisplayQueue)
 {
 	// frame popped from queue
-	GPUFrame NV12input, RGBAframe;
+	GPUFrame NV12input, RGBAframe, edgeFrame;
 
 	// make sure we're crunching numbers on the fastest GPU
 	// every thread needs to call this to use the same GPU
@@ -80,7 +84,13 @@ void threadPostProcess(ConcurrentQueue<GPUFrame>& inputQueue, ConcurrentQueue<GP
 			if(!NV12input.empty())
 			{
 				RGBAframe = NV12toRGBA(NV12input);
-				displayQueue.push(RGBAframe);
+				edgeFrame = sobelFilter(RGBAframe);
+
+				if(edgeFrame.empty())
+					cerr << "sobel filter error" << endl;
+				
+				inputDisplayQueue.push(RGBAframe);
+				outputDisplayQueue.push(edgeFrame);
 			}
 			else
 				cout << "empty frame from decoder" << flush;
@@ -88,7 +98,8 @@ void threadPostProcess(ConcurrentQueue<GPUFrame>& inputQueue, ConcurrentQueue<GP
 		else
 		{
 			// pass EOS signal along
-			displayQueue.push(EOS());
+			inputDisplayQueue.push(EOS());
+			outputDisplayQueue.push(EOS());
 			break;
 		}
 	}
@@ -116,14 +127,14 @@ void threadDisplay(CudaGLviewer& viewer, ConcurrentQueue<GPUFrame>& displayQueue
 
 int main(int argc, char* argv[])
 {
-	// arguments
-	if(argc == 2) // first = number of frames
-		gFramesToProcess = atoi(argv[1]);
-	else if(argc == 3) // second = CUDA card to use
-	{
-		cudaPrimaryDevice = atoi(argv[2]) ? 1 : 0;
-		cudaSecondaryDevice = atoi(argv[2]) ? 0 : 1;
-	}
+	// // arguments
+	// if(argc == 2) // first = number of frames
+	// 	gFramesToProcess = atoi(argv[1]);
+	// else if(argc == 3) // second = CUDA card to use
+	// {
+	// 	cudaPrimaryDevice = atoi(argv[2]) ? 1 : 0;
+	// 	cudaSecondaryDevice = atoi(argv[2]) ? 0 : 1;
+	// }
 
 	// identify GPUs
 	cudaDeviceProp properties;
@@ -137,17 +148,23 @@ int main(int argc, char* argv[])
 	cout << endl;
 
 	// input/decode thread
-	std::thread inputDecodeThread, postProcessThread, displayThread;
+	std::thread inputDecodeThread, postProcessThread, inputDisplayThread, outputDisplayThread;
 
 	// camera
-	unsigned captureWidth = VIDEO_WIDTH, captureHeight = VIDEO_HEIGHT;
+	unsigned captureWidth = 0, captureHeight = 0;
+	if(argc == 3)
+		captureWidth = atoi(argv[1]), captureHeight = atoi(argv[2]);
+	else
+		captureWidth = VIDEO_WIDTH, captureHeight = VIDEO_HEIGHT;
+
 	V4L2cam webcam(string("/dev/video0"), h264, captureWidth, captureHeight);
+	cout << "capture: " << captureWidth << " x " << captureHeight << endl;
 
 	if(!webcam)
 		exit(EXIT_FAILURE);
 
 	// frame queues between threads
-	ConcurrentQueue<GPUFrame> decodedQueue, displayQueue;
+	ConcurrentQueue<GPUFrame> decodedQueue, inputDisplayQueue, outputDisplayQueue;
 
 	// decoder
 	NVdecoder gpuDecoder(decodedQueue);
@@ -163,20 +180,22 @@ int main(int argc, char* argv[])
 		cudaProfilerStart();
 	#endif
 
-	postProcessThread = std::thread(threadPostProcess, std::ref(decodedQueue), std::ref(displayQueue));
+	postProcessThread = std::thread(threadPostProcess, std::ref(decodedQueue), std::ref(inputDisplayQueue), std::ref(outputDisplayQueue));
 
 	// display/input
 	CudaGLviewer::initGlobalState();
 	ConcurrentQueue<KeyEvent> keyInputQueue;
 	KeyEvent currentEvent;
-	CudaGLviewer viewer(captureWidth, captureHeight, "input", &keyInputQueue);
+	CudaGLviewer inputViewer(captureWidth, captureHeight, "input", &keyInputQueue);
+	CudaGLviewer outputViewer(captureWidth, captureHeight, "output");
 
-	if(!viewer)
+	if(!inputViewer || !outputViewer)
 		exit(EXIT_FAILURE);
 
-	displayThread = std::thread(threadDisplay, std::ref(viewer), std::ref(displayQueue));
+	inputDisplayThread = std::thread(threadDisplay, std::ref(inputViewer), std::ref(inputDisplayQueue));
+	outputDisplayThread = std::thread(threadDisplay, std::ref(outputViewer), std::ref(outputDisplayQueue));
 	bool autofocus;
-	while(webcam.isOn() && viewer)
+	while(webcam.isOn() && inputViewer && outputViewer)
 	{
 		CudaGLviewer::update();
 
@@ -229,7 +248,8 @@ int main(int argc, char* argv[])
 	inputDecodeThread.join();
 	postProcessThread.join();
 
-	displayThread.join();
+	inputDisplayThread.join();
+	outputDisplayThread.join();
 	
 	#ifdef CUDA_PROFILING
 		cudaProfilerStop();
