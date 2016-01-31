@@ -32,4 +32,7 @@ int NV12toRGBA(GPUFrame& NV12input, GPUFrame& RGBAoutput);
 GPUFrame sobelFilter(GPUFrame& image);
 int sobelFilter(GPUFrame& image, GPUFrame& edges);
 
+GPUFrame matrixDifference(GPUFrame& positive, GPUFrame& negative);
+int matrixDifference(GPUFrame& positive, GPUFrame& negative, GPUFrame& difference);
+
 #endif

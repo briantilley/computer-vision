@@ -111,46 +111,116 @@ void kernelNV12toRGBA(const void* const input, const unsigned pitchInput,
 // wil be 8 pixels per thread, load 2 at a time with grid-strided reads
 // arrange read and write such that the one memory location can be used
 // kernel must be given normalized convolution matrices of odd width and height
+template<const int filterMatrixWidth, const int filterMatrixHeight>
 __global__
-void kernelMatrixConvolution(const void* const input, const unsigned pitchInput,
-							 void* const output, const unsigned pitchOutput,
-							 const unsigned pixelsWidth, const unsigned pixelsHeight,
-							 const float* const filterMatrix,
-							 const unsigned filterMatrixWidth, const unsigned filterMatrixHeight)
+void kernelMatrixConvolution(const void* const input, const int pitchInput,
+							 void* const output, const int pitchOutput,
+							 const int pixelsWidth, const int pixelsHeight,
+							 const float* const filterMatrix)
 {
 	// // dimensions of the grid
 	// const unsigned gridWidth = gridDim.x * blockDim.x;
 	// const unsigned gridHeight = gridDim.y * blockDim.y;
 
 	// indices of each thread
-	const unsigned gridXidx = blockIdx.x * blockDim.x + threadIdx.x;
-	const unsigned gridYidx = blockIdx.y * blockDim.y + threadIdx.y;
+	const int gridXidx = blockIdx.x * blockDim.x + threadIdx.x;
+	const int gridYidx = blockIdx.y * blockDim.y + threadIdx.y;
 
-	// kill threads that are out of bounds
-	if(gridXidx >= pixelsWidth || gridYidx >= pixelsHeight)
-		return;
+	// matrix size information
+	const int matrixXradius = filterMatrixWidth / 2;
+	const int matrixYradius = filterMatrixHeight / 2;
 
-	int newVal = 0; // new RGBA values for the two pixels
-	float readVal = 0; // two pixels read from input
+	// shared memory allocation
+	extern __shared__ byte smem[];
+	byte* sharedPixelData = smem;
+	float* sharedMatrixData = reinterpret_cast<float*>(sharedPixelData + (matrixXradius + (matrixXradius % 2) + blockDim.x) * (2 * matrixYradius + blockDim.y) * 8);
 
-	const int firstRow = gridYidx - filterMatrixHeight / 2;
-	const int firstColumn = gridXidx - filterMatrixWidth / 2;
+	// index calculations for loading global -> shared memory
+	const int globalLoadXstart = gridXidx - (matrixXradius / 2 + matrixXradius % 2);
+	const int globalLoadXreads = blockDim.x + 2 * (matrixXradius / 2 + matrixXradius % 2); // intended total # of reads by all threads combined
+	const int globalLoadYreads = blockDim.y + 2 * matrixYradius;
+	const int globalLoadXiterations = globalLoadXreads / blockDim.x + ((globalLoadXreads % blockDim.x) ? 1 : 0);
+	const int globalLoadYiterations = globalLoadYreads / blockDim.y + ((globalLoadYreads % blockDim.y) ? 1 : 0);
 
-	for(int colorElement = 0; colorElement < 3; ++colorElement)
+	const int sharedStorePitch = (blockDim.x + matrixXradius + (matrixXradius % 2)) * 8;
+
+	int globalLoadXindex = globalLoadXstart;
+	int globalLoadYindex = gridYidx - matrixYradius;
+
+	int sharedStoreXindex = threadIdx.x;
+	int sharedStoreYindex = threadIdx.y;
+
+
+	// perform loads
+	for(int yStrides = 0; yStrides < globalLoadYiterations; ++yStrides)
 	{
-		newVal = 0;
-
-		for(int i = 0; i < filterMatrixHeight; ++i)
+		if(sharedStoreYindex < globalLoadYreads)
 		{
-			for(int j = 0; j < filterMatrixWidth; ++j)
+			for(int xStrides = 0; xStrides < globalLoadXiterations; ++xStrides)
 			{
-				readVal = static_cast<const byte*>(input)[min(max(firstRow + i, 0), pixelsHeight - 1) * pitchInput + min(max(firstColumn + j, 0), pixelsWidth - 1) * 4 + colorElement];
-				newVal += readVal * filterMatrix[i * filterMatrixWidth + j] + 0.5f;
+				if(sharedStoreXindex < globalLoadXreads)
+				{
+					reinterpret_cast<word*>(sharedPixelData + sharedStoreYindex * sharedStorePitch)[sharedStoreXindex]
+					=
+					reinterpret_cast<const word*>(static_cast<const byte*>(input) + min(max(globalLoadYindex, 0), pixelsHeight - 1) * pitchInput)[min(max(globalLoadXindex, 0), pixelsWidth / 2 - 1)];
+				}
+
+				globalLoadXindex += blockDim.x;
+				sharedStoreXindex += blockDim.x;
 			}
+
+			globalLoadXindex = globalLoadXstart;
+			sharedStoreXindex = threadIdx.x;
 		}
 
-		static_cast<byte*>(output)[gridYidx * pitchOutput + gridXidx * 4 + colorElement] = min(min(newVal, 0), 255);
+		globalLoadYindex += blockDim.y;
+		sharedStoreYindex += blockDim.y;
 	}
+
+	const unsigned blockSize1D = blockDim.x * blockDim.y;
+	const unsigned blockIdx1D = blockDim.x * threadIdx.y + threadIdx.x;
+	const unsigned filterMatrixSize1D = filterMatrixWidth * filterMatrixHeight;
+	const unsigned moveIdx = filterMatrixSize1D + blockIdx1D - blockSize1D;
+	if(blockIdx1D >= blockSize1D - filterMatrixSize1D)
+	{
+		sharedMatrixData[moveIdx] = filterMatrix[moveIdx];
+	}
+
+	// make sure all data is in shared memory after loads are done and before reads begin
+	__syncthreads();
+
+	// kill threads that are out of bounds
+	if(gridXidx * 2 >= pixelsWidth || gridYidx >= pixelsHeight)
+		return;
+
+	word outputPair = 0xffffffffffffffff;
+
+	byte inputValue = 0;
+	float outputValue = 0;
+
+	#pragma unroll
+	for(int pixelInPair = 0; pixelInPair < 2; ++pixelInPair)
+	{
+		#pragma unroll
+		for(int colorElement = 0; colorElement < 3; ++colorElement)
+		{
+			outputValue = 0;
+			#pragma unroll
+			for(int neighborYoffset = 0; neighborYoffset < filterMatrixHeight; ++neighborYoffset)
+			{
+				#pragma unroll
+				for(int neighborXoffset = 0; neighborXoffset < filterMatrixWidth; ++neighborXoffset)
+				{
+					inputValue = sharedPixelData[(threadIdx.y + neighborYoffset) * sharedStorePitch + (2 * threadIdx.x + pixelInPair + neighborXoffset + matrixXradius % 2) * 4 + colorElement];
+					outputValue += inputValue * sharedMatrixData[neighborYoffset * filterMatrixWidth + neighborXoffset];
+				}
+			}
+
+			reinterpret_cast<byte*>(&outputPair)[pixelInPair * 4 + colorElement] = max(min(static_cast<int>(outputValue + 0.5f), 255), 0);
+		}
+	}
+
+	reinterpret_cast<word*>(static_cast<byte*>(output) + gridYidx * pitchOutput)[gridXidx] = outputPair;
 }
 
 // magnitude of sum of A and B treated as orthogonal axis-aligned vectors
@@ -175,7 +245,7 @@ void kernelVectorSum(const void* const inputA, const unsigned pitchInputA,
 	// destinations for packed data
 	word inputApixels = 0, inputBpixels = 0, outputCpixels = 0;
 
-	// work on the image in 2 parts with half as many threads
+	// work on the image in multiple parts with fewer threads
 	#pragma unroll
 	for(int i = 0; i < VEC_SUM_GRID_STRIDE_COUNT; ++i)
 	{
@@ -191,6 +261,50 @@ void kernelVectorSum(const void* const inputA, const unsigned pitchInputA,
 		reinterpret_cast<byte*>(&outputCpixels)[4] = sqrt(static_cast<float>(reinterpret_cast<byte*>(&inputApixels)[4]) * reinterpret_cast<byte*>(&inputApixels)[4] + static_cast<float>(reinterpret_cast<byte*>(&inputBpixels)[4]) * reinterpret_cast<byte*>(&inputBpixels)[4]);
 		reinterpret_cast<byte*>(&outputCpixels)[5] = sqrt(static_cast<float>(reinterpret_cast<byte*>(&inputApixels)[5]) * reinterpret_cast<byte*>(&inputApixels)[5] + static_cast<float>(reinterpret_cast<byte*>(&inputBpixels)[5]) * reinterpret_cast<byte*>(&inputBpixels)[5]);
 		reinterpret_cast<byte*>(&outputCpixels)[6] = sqrt(static_cast<float>(reinterpret_cast<byte*>(&inputApixels)[6]) * reinterpret_cast<byte*>(&inputApixels)[6] + static_cast<float>(reinterpret_cast<byte*>(&inputBpixels)[6]) * reinterpret_cast<byte*>(&inputBpixels)[6]);
+
+		// write
+		reinterpret_cast<word*>(static_cast<byte*>(output) + gridYidx * pitchOutput)[i * activeGridWidth + gridXidx] = outputCpixels;
+	}
+}
+
+// matrix sum of -A and B
+#define DIFFERENCE_GRID_STRIDE_COUNT 8 // number of sections the image is processed in
+__global__
+void kernelMatrixDifference(const void* const inputA, const unsigned pitchInputA,
+						    const void* const inputB, const unsigned pitchInputB,
+						    void* const output, const unsigned pitchOutput,
+						    const unsigned pixelsWidth, const unsigned pixelsHeight)
+{
+	// const unsigned gridWidth = gridDim.x * blockDim.x;
+	const unsigned activeGridWidth = pixelsWidth / (2 * DIFFERENCE_GRID_STRIDE_COUNT);
+
+	// indices of each thread
+	const unsigned gridXidx = blockIdx.x * blockDim.x + threadIdx.x;
+	const unsigned gridYidx = blockIdx.y * blockDim.y + threadIdx.y;
+
+	// kill threads that are out of bounds
+	if(gridXidx >= activeGridWidth || gridYidx >= pixelsHeight)
+		return;
+
+	// destinations for packed data
+	word inputApixels = 0, inputBpixels = 0, outputCpixels = 0;
+
+	// work on the image in multiple parts with fewer threads
+	#pragma unroll
+	for(int i = 0; i < DIFFERENCE_GRID_STRIDE_COUNT; ++i)
+	{
+		// read
+		inputApixels = reinterpret_cast<const word*>(static_cast<const byte*>(inputA) + gridYidx * pitchInputA)[i * activeGridWidth + gridXidx];
+		inputBpixels = reinterpret_cast<const word*>(static_cast<const byte*>(inputB) + gridYidx * pitchInputB)[i * activeGridWidth + gridXidx];
+
+		// store the difference of each component
+		reinterpret_cast<byte*>(&outputCpixels)[0] = max(min(static_cast<int>(reinterpret_cast<byte*>(&inputBpixels)[0]) - reinterpret_cast<byte*>(&inputApixels)[0], 255), 0);
+		reinterpret_cast<byte*>(&outputCpixels)[1] = max(min(static_cast<int>(reinterpret_cast<byte*>(&inputBpixels)[1]) - reinterpret_cast<byte*>(&inputApixels)[1], 255), 0);
+		reinterpret_cast<byte*>(&outputCpixels)[2] = max(min(static_cast<int>(reinterpret_cast<byte*>(&inputBpixels)[2]) - reinterpret_cast<byte*>(&inputApixels)[2], 255), 0);
+
+		reinterpret_cast<byte*>(&outputCpixels)[4] = max(min(static_cast<int>(reinterpret_cast<byte*>(&inputBpixels)[4]) - reinterpret_cast<byte*>(&inputApixels)[4], 255), 0);
+		reinterpret_cast<byte*>(&outputCpixels)[5] = max(min(static_cast<int>(reinterpret_cast<byte*>(&inputBpixels)[5]) - reinterpret_cast<byte*>(&inputApixels)[5], 255), 0);
+		reinterpret_cast<byte*>(&outputCpixels)[6] = max(min(static_cast<int>(reinterpret_cast<byte*>(&inputBpixels)[6]) - reinterpret_cast<byte*>(&inputApixels)[6], 255), 0);
 
 		// write
 		reinterpret_cast<word*>(static_cast<byte*>(output) + gridYidx * pitchOutput)[i * activeGridWidth + gridXidx] = outputCpixels;
@@ -300,29 +414,39 @@ int sobelFilter(GPUFrame& image, GPUFrame& edges)
 {
 	// keep static device pointer to normalized sobel
 	// convolution filter and generate if first call
+
 	static float hostSobelXFilter[] = {-1.f/8, 0.f, 1.f/8, -2.f/8, 0.f, 2.f/8, -1.f/8, 0.f, 1.f/8};
+	// static float hostSobelXFilter[] = {0.f, 0.f, 0.f, 0.f, 1.f, 0.f, 0.f, 0.f, 0.f};
 	static float* sobelXFilter = nullptr;
 	static float hostSobelYFilter[] = {-1.f/8, -2.f/8, -1.f/8, 0, 0, 0, 1.f/8, 2.f/8, 1.f/8};
+	// static float hostSobelYFilter[] = {0.f, 0.f, 0.f, 0.f, 1.f, 0.f, 0.f, 0.f, 0.f};
 	static float* sobelYFilter = nullptr;
 
+	// space for intermediate results
+	static GPUFrame sobelX, sobelY;
+
+	// one-time host-to-device copy of the filters
+	// one-time allocation of scratch surfaces
 	if(nullptr == sobelXFilter)
 	{
+		// copy to device
 		cudaErr(cudaMalloc(&sobelXFilter, 9 * sizeof(float)));
 		cudaErr(cudaMemcpy(sobelXFilter, hostSobelXFilter, 9 * sizeof(float), cudaMemcpyHostToDevice));
 
 		cudaErr(cudaMalloc(&sobelYFilter, 9 * sizeof(float)));
 		cudaErr(cudaMemcpy(sobelYFilter, hostSobelYFilter, 9 * sizeof(float), cudaMemcpyHostToDevice));
-	}
 
-	static GPUFrame sobelX(image.width(), image.height(), 4 * image.width(), image.height(), 0);
-	static GPUFrame sobelY(image.width(), image.height(), 4 * image.width(), image.height(), 0);
+		// allocate frames for intermediate results
+		sobelX = GPUFrame(image.width(), image.height(), 4 * image.width(), image.height(), 0);
+		sobelY = GPUFrame(image.width(), image.height(), 4 * image.width(), image.height(), 0);
+	}
 
 	// figure out dimensions
 	dim3 grid, block(BLOCK_WIDTH, BLOCK_HEIGHT);
-	grid.x = image.width() / block.x;
+	grid.x = image.width() / (2 * block.x);
 	grid.y = image.height() / block.y;
 
-	if(image.width() % block.x)
+	if(image.width() % (2 * block.x))
 		grid.x++;
 
 	if(image.height() % block.y)
@@ -334,17 +458,15 @@ int sobelFilter(GPUFrame& image, GPUFrame& edges)
 	sharedSpaceSize += 3 * 3 * sizeof(float); // convolution matrix
 
 	// launch convolution kernel with sobel matrix
-	kernelMatrixConvolution<<< grid, block, sharedSpaceSize >>>(image.data(), image.pitch(),
-											   sobelX.data(), sobelX.pitch(),
-											   image.width(), image.height(),
-											   sobelXFilter,
-											   3, 3);
+	kernelMatrixConvolution<3, 3><<< grid, block, sharedSpaceSize >>>(image.data(), image.pitch(),
+																sobelX.data(), sobelX.pitch(),
+																image.width(), image.height(),
+																sobelXFilter);
 
-	kernelMatrixConvolution<<< grid, block, sharedSpaceSize >>>(image.data(), image.pitch(),
-											   sobelY.data(), sobelY.pitch(),
-											   image.width(), image.height(),
-											   sobelYFilter,
-											   3, 3);
+	kernelMatrixConvolution<3, 3><<< grid, block, sharedSpaceSize >>>(image.data(), image.pitch(),
+																sobelY.data(), sobelY.pitch(),
+																image.width(), image.height(),
+																sobelYFilter);
 
 	// width of the grid must change for vector sum
 	grid.x = image.width() / (2 * VEC_SUM_GRID_STRIDE_COUNT * block.x);
@@ -356,6 +478,57 @@ int sobelFilter(GPUFrame& image, GPUFrame& edges)
 									   sobelY.data(), sobelY.pitch(),
 									   edges.data(), edges.pitch(),
 									   image.width(), image.height());
+
+	// sync and check for errors
+	cudaDeviceSynchronize(); cudaErr(cudaGetLastError());
+
+	// success
+	return 0;
+}
+
+// allocate for and run the difference kernel
+GPUFrame matrixDifference(GPUFrame& positive, GPUFrame& negative)
+{
+	// reference for the new frame
+	GPUFrame allocatedFrame;
+
+	// make an object for the output image
+	unsigned allocationRows = positive.height();
+	unsigned allocationCols = 4 * positive.width();
+
+	// make the actual memory allocation
+	allocatedFrame = GPUFrame(positive.width(), positive.height(), allocationCols, allocationRows, positive.timestamp());
+
+	if(0 == matrixDifference(positive, negative, allocatedFrame))
+	{
+		// original success indicator
+		return allocatedFrame;
+	}
+	else
+	{
+		// original failure indicator
+		return GPUFrame();
+	}
+}
+
+int matrixDifference(GPUFrame& positive, GPUFrame& negative, GPUFrame& difference)
+{
+	// figure out dimensions
+	dim3 grid, block(BLOCK_WIDTH, BLOCK_HEIGHT);
+	grid.x = positive.width() / (2 * block.x);
+	grid.y = positive.height() / block.y;
+
+	if(positive.width() % (2 * block.x))
+		grid.x++;
+
+	if(positive.height() % block.y)
+		grid.y++;
+
+	// vector sum of both sobel images
+	kernelMatrixDifference<<< grid, block >>>(negative.data(), negative.pitch(),
+											  positive.data(), positive.pitch(),
+											  difference.data(), difference.pitch(),
+											  positive.width(), positive.height());
 
 	// sync and check for errors
 	cudaDeviceSynchronize(); cudaErr(cudaGetLastError());

@@ -9,7 +9,7 @@
 
 #include <unistd.h>
 
-// #define CUDA_PROFILING
+#define CUDA_PROFILING
 #define GL_VIEWER_UPDATE_INTERVAL 1000
 #define VIDEO_WIDTH 160
 #define VIDEO_HEIGHT 120
@@ -67,7 +67,7 @@ void threadInputDecode(V4L2cam& webcam, NVdecoder& decoder)
 void threadPostProcess(ConcurrentQueue<GPUFrame>& inputQueue, ConcurrentQueue<GPUFrame>& inputDisplayQueue,  ConcurrentQueue<GPUFrame>& outputDisplayQueue)
 {
 	// frame popped from queue
-	GPUFrame NV12input, RGBAframe, edgeFrame;
+	GPUFrame NV12input, RGBAframe, edgeFrame, difference;
 
 	// make sure we're crunching numbers on the fastest GPU
 	// every thread needs to call this to use the same GPU
@@ -85,12 +85,11 @@ void threadPostProcess(ConcurrentQueue<GPUFrame>& inputQueue, ConcurrentQueue<GP
 			{
 				RGBAframe = NV12toRGBA(NV12input);
 				edgeFrame = sobelFilter(RGBAframe);
-
-				if(edgeFrame.empty())
-					cerr << "sobel filter error" << endl;
+				// difference = matrixDifference(edgeFrame, RGBAframe);
 				
 				inputDisplayQueue.push(RGBAframe);
 				outputDisplayQueue.push(edgeFrame);
+				// outputDisplayQueue.push(difference);
 			}
 			else
 				cout << "empty frame from decoder" << flush;
