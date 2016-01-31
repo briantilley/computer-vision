@@ -11,6 +11,7 @@
 
 // more explicit way of specifying data
 typedef uint8_t byte;
+typedef int8_t sbyte;
 typedef uint64_t word; // optimal reads are 64 bits
 
 // prototypes for interface functions (no need to open up kernel protoypes)
@@ -28,6 +29,12 @@ typedef uint64_t word; // optimal reads are 64 bits
 // returns an object referring to the output RGBA image (format defined above) in device memory
 GPUFrame NV12toRGBA(GPUFrame& NV12input); 
 int NV12toRGBA(GPUFrame& NV12input, GPUFrame& RGBAoutput);
+
+GPUFrame NV12toGrayscale(GPUFrame& NV12input); 
+int NV12toGrayscale(GPUFrame& NV12input, GPUFrame& grayOutput);
+
+GPUFrame RGBAtoGrayscale(GPUFrame& RGBAinput); 
+int RGBAtoGrayscale(GPUFrame& RGBAinput, GPUFrame& grayOutput);
 
 GPUFrame sobelFilter(GPUFrame& image);
 int sobelFilter(GPUFrame& image, GPUFrame& edges);

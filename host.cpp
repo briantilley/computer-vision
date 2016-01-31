@@ -67,7 +67,7 @@ void threadInputDecode(V4L2cam& webcam, NVdecoder& decoder)
 void threadPostProcess(ConcurrentQueue<GPUFrame>& inputQueue, ConcurrentQueue<GPUFrame>& inputDisplayQueue,  ConcurrentQueue<GPUFrame>& outputDisplayQueue)
 {
 	// frame popped from queue
-	GPUFrame NV12input, RGBAframe, edgeFrame, difference;
+	GPUFrame NV12input, RGBAframe, grayscaleFrame, edgeFrame, differenceFrame;
 
 	// make sure we're crunching numbers on the fastest GPU
 	// every thread needs to call this to use the same GPU
@@ -83,13 +83,17 @@ void threadPostProcess(ConcurrentQueue<GPUFrame>& inputQueue, ConcurrentQueue<GP
 			// convert the frame
 			if(!NV12input.empty())
 			{
+				// grayscaleFrame = NV12toGrayscale(NV12input);
 				RGBAframe = NV12toRGBA(NV12input);
+				// grayscaleFrame = RGBAtoGrayscale(RGBAframe);
+				// edgeFrame = sobelFilter(grayscaleFrame);
 				edgeFrame = sobelFilter(RGBAframe);
-				// difference = matrixDifference(edgeFrame, RGBAframe);
+				// differenceFrame = matrixDifference(edgeFrame, RGBAframe);
 				
 				inputDisplayQueue.push(RGBAframe);
+				// outputDisplayQueue.push(grayscaleFrame);
 				outputDisplayQueue.push(edgeFrame);
-				// outputDisplayQueue.push(difference);
+				// outputDisplayQueue.push(differencFrame);
 			}
 			else
 				cout << "empty frame from decoder" << flush;
