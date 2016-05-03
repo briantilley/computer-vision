@@ -1,24 +1,31 @@
 #include <iostream>
 #include <iomanip>
 #include <thread>
+#include <fstream>
+#include <cctype>
+#include <unistd.h>
+
+#define CONFIG_FILENAME "config/config.txt"
+
+/*
 #include "headers/V4L2cam.h"
 #include "headers/NVdecoder.h"
 #include "headers/CudaGLviewer.h"
 #include "headers/device.h"
 #include "headers/constants.h"
 
-#include <unistd.h>
+// cuda stuff
+#include <cuda_profiler_api.h>
 
 #define CUDA_PROFILING
 #define GL_VIEWER_UPDATE_INTERVAL 1000
 #define VIDEO_WIDTH 160
 #define VIDEO_HEIGHT 120
+*/
 
 using namespace std;
 
-// cuda stuff
-#include <cuda_profiler_api.h>
-
+/*
 unsigned gFramesToProcess = DEFAULT_FRAMES_TO_PROCESS;
 unsigned cudaPrimaryDevice = 0;
 unsigned cudaSecondaryDevice = 1;
@@ -89,7 +96,7 @@ void threadPostProcess(ConcurrentQueue<GPUFrame>& inputQueue, ConcurrentQueue<GP
 				// edgeFrame = sobelFilter(grayscaleFrame);
 				edgeFrame = sobelFilter(RGBAframe);
 				// differenceFrame = matrixDifference(edgeFrame, RGBAframe);
-				
+
 				inputDisplayQueue.push(RGBAframe);
 				// outputDisplayQueue.push(grayscaleFrame);
 				outputDisplayQueue.push(edgeFrame);
@@ -127,9 +134,83 @@ void threadDisplay(CudaGLviewer& viewer, ConcurrentQueue<GPUFrame>& displayQueue
 		}
 	}
 }
+*/
+
+// get requested configuration option from specified file
+// return empty string on error
+string getConfigOption(const string key)
+{
+	// start and end locations of substrings in the line
+	int i, j;
+
+	// value from KEY=VALUE pair expected in file (empty by default)
+	string value;
+
+	// input line from file
+	string line;
+
+	ifstream configFileStream(CONFIG_FILENAME);
+
+	// quit if file doesn't open
+	if(!configFileStream)
+		return "";
+
+	while(configFileStream.good())
+	{
+		// read one line at a time
+		getline(configFileStream, line);
+
+		// throw out comment lines
+		if(line[0] == '#') continue;
+
+		// find first character of key
+		for(i = 0; i < line.size(); ++i)
+			if(line[i] == key[0])
+				break;
+
+		// break
+		if(i == line.size()) continue;
+
+		// find delimiter (space or =)
+		for(j = i + 1; j < line.size(); ++j)
+			if(line[j] == '=' || line[j] == ' ')
+				break;
+
+		// ignore line (no space for value)
+		if(j == line.size()) continue;
+
+		// check key against candidate substring
+		if(line.substr(i, j - i) != key) continue;
+
+		// find start of value (toss whitespace)
+		for(i = j + 1; i < line.size(); ++i)
+			if(!isspace(line[i]) && line[i] != '=')
+				break;
+
+		// check next line if key not found
+		if(i == line.size()) continue;
+
+		// find end of value
+		for(j = i + 1; j < line.size(); ++j)
+			if(isspace(line[j]))
+				break;
+
+		// successfully found value for key
+		value = line.substr(i, j - i);
+		break;
+	}
+
+	configFileStream.close();
+
+	return value;
+}
 
 int main(int argc, char* argv[])
 {
+	cout << "SOURCE=" << getConfigOption("SOURCE") << endl;
+	cout << "DESTINATION=" << getConfigOption("DESTINATION") << endl;
+
+	/*
 	// // arguments
 	// if(argc == 2) // first = number of frames
 	// 	gFramesToProcess = atoi(argv[1]);
@@ -253,10 +334,10 @@ int main(int argc, char* argv[])
 
 	inputDisplayThread.join();
 	outputDisplayThread.join();
-	
+
 	#ifdef CUDA_PROFILING
 		cudaProfilerStop();
 	#endif
-
+*/
 	return 0;
 }
