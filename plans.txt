@@ -1,0 +1,13 @@
+implement configuration file - DONE
+generalize V4L2cam to any video codec
+add video file input
+add video file output
+adapt all code to allow transparent CPU implementations
+	decode
+		also generalize to any video codec
+	processing
+	display
+move to NVIDIA's NPP (GPU) and Intel's IPP (CPU) library for processing
+
+keep in mind:
+uphold transparency between CPU and GPU implementations
