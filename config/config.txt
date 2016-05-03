@@ -1,0 +1,7 @@
+# Configuration options for computer-vision
+
+# options: /dev/videoX, file (prompt at runtime)
+INPUT_DEVICE=/dev/video0
+
+# options: display (show on screen), file (prompt at runtime), both, none
+OUTPUT_DESTINATION=none
