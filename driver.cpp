@@ -7,8 +7,10 @@
 
 #define CONFIG_FILENAME "config/config.txt"
 
-/*
 #include "headers/V4L2cam.h"
+#include "headers/RawFrameCPU.h"
+
+/*
 #include "headers/NVdecoder.h"
 #include "headers/CudaGLviewer.h"
 #include "headers/device.h"
@@ -207,8 +209,45 @@ string getConfigOption(const string key)
 
 int main(int argc, char* argv[])
 {
-	cout << "SOURCE=" << getConfigOption("SOURCE") << endl;
-	cout << "DESTINATION=" << getConfigOption("DESTINATION") << endl;
+	string videoSourceConfig = getConfigOption("SOURCE");
+	if(videoSourceConfig.substr(0, 10) != "/dev/video")
+	{
+		cerr << "error: must specify video device from /dev/ as input" << endl;
+		return 1;
+	}
+
+	string capWidthConfig, capHeightConfig;
+	unsigned captureWidth = 0, captureHeight = 0;
+
+	if(videoSourceConfig.substr(0, 10) == "/dev/video")
+	{
+		capWidthConfig = getConfigOption("CAPTURE_WIDTH");
+		capHeightConfig = getConfigOption("CAPTURE_HEIGHT");
+
+		if(capWidthConfig == "" || capHeightConfig == "")
+		{
+			cerr << "error: must specify capture width and height for input device" << endl;
+			return 1;
+		}
+
+		captureWidth = atoi(capWidthConfig.c_str());
+		captureHeight = atoi(capHeightConfig.c_str());
+	}
+
+	V4L2cam webcam(videoSourceConfig, MJPG, captureWidth, captureHeight);
+
+	if(!webcam.good())
+		return 1;
+
+	webcam.streamOn();
+
+	for(int i = 0; i < 60; ++i)
+	{
+		CodedFrame data = webcam.retrieveCodedFrame();
+		cout << "." << flush;
+	}
+
+	cout << endl;
 
 	/*
 	// // arguments

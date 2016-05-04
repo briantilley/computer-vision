@@ -140,7 +140,7 @@ NVdecoder::NVdecoder(ConcurrentQueue<GPUFrame>& outputQueue): m_outputQueue(outp
 		CUdevice candidateDevice; // try to use this device for decoding
 		int deviceCount; // number of installed CUDA devices
 		int mainCanAccessCandidate; // C-style bool
-		
+
 		cuErr(cuDeviceGetCount(&deviceCount));
 		if(1 < deviceCount)
 		{
@@ -182,7 +182,7 @@ NVdecoder::NVdecoder(ConcurrentQueue<GPUFrame>& outputQueue): m_outputQueue(outp
 	params.ulClockRate            = DEFAULT_CLOCK_RATE;
 	params.ulErrorThreshold       = DEFAULT_ERROR_THRESHOLD;
 	params.ulMaxDisplayDelay      = DEFAULT_DECODE_GAP;
-	
+
 	memset(params.uReserved1, 0, sizeof(params.uReserved1));
 
 	params.pUserData              = this; // keep track of instances involved

@@ -22,7 +22,8 @@ typedef uint8_t byte;
 // user must specify format in constructor
 enum dataFormat
 {
-	h264 = V4L2_PIX_FMT_H264
+	H264 = V4L2_PIX_FMT_H264,
+	MJPG = V4L2_PIX_FMT_MJPEG
 };
 
 // camera controls (exposure, gain, focus, etc.)
@@ -87,7 +88,7 @@ public:
 	int getHeight(void) const { return videoHeight; }
 	bool isOn(void) const { return m_isOn; }
 	int getControl(control); // get value of specified control
-	
+
 	// indicate good stream
 	operator bool() const { return m_isValid; } // implicit conversion
 	bool good() const { return m_isValid; }

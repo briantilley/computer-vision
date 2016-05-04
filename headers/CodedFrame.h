@@ -15,6 +15,8 @@
 // development
 #include <iostream>
 
+#define CODED_FRAME_NUM_TRAILING_ZEROS 8
+
 // more explicit
 typedef uint8_t byte;
 
@@ -36,19 +38,21 @@ public:
 	CodedFrame(const byte* _data, unsigned _length, unsigned _timestamp)
 	{
 		// make a copy
-		byte* newData = new byte[_length];
+		// keep zeroes at the end of the frame/packet for libavcodec
+		byte* newData = new byte[_length + CODED_FRAME_NUM_TRAILING_ZEROS];
 		memcpy(static_cast<void*>(newData), static_cast<const void*>(_data), _length);
+		memset(newData + _length, 0, CODED_FRAME_NUM_TRAILING_ZEROS);
 
 		// lambda ensures allocation is fully freed
 		m_data = std::shared_ptr<byte>(newData, [=](byte* p){ delete [] p; });
 		m_length = _length;
 		m_timestamp = _timestamp;
 	}
-	
+
 	// copy constructor/assignment just duplicate state
 	CodedFrame(const CodedFrame& toCopy) = default;
 	CodedFrame& operator=(const CodedFrame& right) = default;
-	
+
 	// free copy of data
 	~CodedFrame() = default;
 
@@ -56,7 +60,7 @@ public:
 	bool empty(void) const { return !static_cast<bool>(m_length); }
 
 	unsigned size(void) const { return m_length; } // size of allocation
-	const byte* raw_data(void) const { return m_data.get(); } // immutable information contained
+	const byte* data(void) const { return m_data.get(); } // immutable information contained
 	unsigned timestamp(void) const { return m_timestamp; } // capture time of frame
 
 	// time between frames

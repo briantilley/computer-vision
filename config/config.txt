@@ -3,5 +3,10 @@
 # options: /dev/videoX, file (prompt at runtime)
 SOURCE=/dev/video0
 
+# used only when a camera is specfied in SOURCE
+# get available dimensions from v4l2-ctl --list-formats-ext -dX for input /dev/videoX
+CAPTURE_WIDTH=1280
+CAPTURE_HEIGHT=720
+
 # options: display (show on screen), file (prompt at runtime), both, none
 DESTINATION=none

@@ -60,8 +60,22 @@ V4L2cam::V4L2cam(std::string device, dataFormat format, unsigned& width, unsigne
 	ext_ctrls.controls[0].value  = V4L2_EXPOSURE_MANUAL;
 	ext_ctrls.controls[1].id     = V4L2_CID_EXPOSURE_AUTO_PRIORITY;
 	ext_ctrls.controls[1].value  = 0;
+
 	// ext_ctrls.controls[2].id     = V4L2_CID_GAIN;
 	// ext_ctrls.controls[2].value  = 127;
+
+	// validation loop ensures only available controls are set
+	// if errno indicates some other issue, allow failure to occur
+	while(-1 == xioctl(fileDescriptor, VIDIOC_TRY_EXT_CTRLS, &ext_ctrls) && EINVAL == errno)
+	{
+		// get index of ctrl messign with function call
+		int problemCtrl = ext_ctrls.error_idx;
+
+		// remove problem ctrl from array
+		ext_ctrls.controls[problemCtrl].id = ext_ctrls.controls[ext_ctrls.count - 1].id;
+		ext_ctrls.controls[problemCtrl].value = ext_ctrls.controls[ext_ctrls.count - 1].value;
+		ext_ctrls.count--;
+	}
 
 	// disable auto exposure (limits framerate)
 	if(-1 == xioctl(fileDescriptor, VIDIOC_S_EXT_CTRLS, &ext_ctrls))
@@ -177,7 +191,7 @@ int V4L2cam::getControl(control parameter)
 {
 	// make other operations wait
 	std::unique_lock<std::mutex> mlock(m_cameraMutex);
-	
+
 	// controls struct for V4L2
 	struct v4l2_ext_controls controls;
 	struct v4l2_ext_control ctrlStruct;
@@ -229,7 +243,7 @@ int V4L2cam::setControl(control parameter, int value)
 {
 	// make other operations wait
 	std::unique_lock<std::mutex> mlock(m_cameraMutex);
-	
+
 	// controls struct for V4L2
 	struct v4l2_ext_controls controls;
 	struct v4l2_ext_control ctrlStruct;
@@ -283,7 +297,7 @@ int V4L2cam::changeControl(enum control parameter, int delta)
 {
 	// make other operations wait
 	std::unique_lock<std::mutex> mlock(m_cameraMutex);
-	
+
 	// controls struct for V4L2
 	struct v4l2_ext_controls controls;
 	struct v4l2_ext_control ctrlStruct;
