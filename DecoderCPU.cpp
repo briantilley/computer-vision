@@ -18,6 +18,18 @@ AVCodecID DecoderCPU::getAVcodec(enum encoding e)
 	}
 }
 
+RawFrame::format avPixFmt_to_rawFrameFormat(AVPixelFormat fmt)
+{
+	switch(fmt)
+	{
+		case AV_PIX_FMT_YUVJ422P:
+		return RawFrame::RAW_FRAME_FORMAT_YUVJ422P;
+
+		default:
+		return RawFrame::RAW_FRAME_FORMAT_NONE;
+	}
+}
+
 // specify format and output queue
 DecoderCPU::DecoderCPU(enum encoding inputFormat, ConcurrentQueue<RawFrame>& q): Decoder(q, false)
 {
@@ -70,8 +82,8 @@ int DecoderCPU::decodeFrame(const CodedFrame& frame)
 	// attempt to pull a frame out of the decoder
 	if(!avcodec_receive_frame(m_codecContext, m_frame))
 	{
-		m_destQueue.push(RawFrameCPU(m_frame->data[0], m_frame->linesize[0],
-			m_frame->width, m_frame->height, m_frame->linesize[0], m_frame->height, 0));
+		m_destQueue.push(RawFrameCPU(m_frame->data[0], m_frame->width, m_frame->height,
+			m_frame->linesize, avPixFmt_to_rawFrameFormat(static_cast<AVPixelFormat>(m_frame->format)), 0));
 	}
 
 	return errCode;
@@ -88,8 +100,8 @@ void DecoderCPU::endStream(void)
 	// flush entire internal buffer
 	while(!avcodec_receive_frame(m_codecContext, m_frame))
 	{
-		m_destQueue.push(RawFrameCPU(m_frame->data[0], m_frame->linesize[0],
-			m_frame->width, m_frame->height, m_frame->linesize[0], m_frame->height, 0));
+		m_destQueue.push(RawFrameCPU(m_frame->data[0], m_frame->width, m_frame->height,
+			m_frame->linesize, avPixFmt_to_rawFrameFormat(static_cast<AVPixelFormat>(m_frame->format)), 0));
 	}
 
 	// push eos frame to output queue

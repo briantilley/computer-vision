@@ -13,25 +13,55 @@ public:
 	RawFrameCPU(bool eos): RawFrame(eos) { }
 
 	// make an entirely new allocation
-	RawFrameCPU(unsigned imageWidth, unsigned imageHeight, unsigned allocationCols, unsigned allocationRows,
-			 unsigned timestamp, bool eos=false): RawFrame(imageWidth, imageHeight, allocationCols, allocationRows,
-			 timestamp, false, eos)
+	template<typename T>
+	RawFrameCPU(unsigned imageWidth, unsigned imageHeight, T* pitches, RawFrame::format format, unsigned timestamp,
+		bool eos=false): RawFrame(imageWidth, imageHeight, pitches, format, timestamp, false, eos)
 	{
 		// get space on the heap
-		uint8_t* newAllocation;
-		newAllocation = new uint8_t[allocationRows * allocationCols];
+		uint8_t* newAllocation = nullptr;
+		size_t allocationSize = 0;
+		switch(format)
+		{
+			case RAW_FRAME_FORMAT_YUVJ422P:
+				allocationSize = (pitches[0] + pitches[1] + pitches[2]) * m_height;
+			break;
+
+			case RAW_FRAME_FORMAT_NV12:
+				allocationSize = (pitches[0] * 3 * m_height) / 2;
+			break;
+
+			default:
+			break;
+		}
+
+		newAllocation = new uint8_t[allocationSize];
 
 		// // track allocation with the shared_ptr
 		m_data = std::shared_ptr<uint8_t>(newAllocation, [=](uint8_t* p){ delete [] p; });
 	}
 
 	// copy from given location
-	RawFrameCPU(uint8_t* data, unsigned pitch,
-			 unsigned imageWidth, unsigned imageHeight, unsigned allocationCols, unsigned allocationRows,
-			 unsigned timestamp, bool eos=false): RawFrameCPU(imageWidth, imageHeight, allocationCols, allocationRows, timestamp, eos)
+	template<typename T>
+	RawFrameCPU(uint8_t* data, unsigned imageWidth, unsigned imageHeight, T* pitches, RawFrame::format format, unsigned timestamp,
+		bool eos=false): RawFrameCPU(imageWidth, imageHeight, pitches, format, timestamp, eos)
 	{
 		// copy into a more permanent chunk of memory allocated by above ctor
-		memcpy(m_data.get(), data, allocationRows * allocationCols);
+		size_t allocationSize = 0;
+		switch(format)
+		{
+			case RAW_FRAME_FORMAT_YUVJ422P:
+				allocationSize = (pitches[0] + pitches[1] + pitches[2]) * m_height;
+			break;
+
+			case RAW_FRAME_FORMAT_NV12:
+				allocationSize = (pitches[0] * 3 * m_height) / 2;
+			break;
+
+			default:
+			break;
+		}
+
+		memcpy(m_data.get(), data, allocationSize);
 	}
 
 	// let C++ copy all member data
