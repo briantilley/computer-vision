@@ -46,7 +46,7 @@ public:
 	// copy from given location
 	RawFrameGPU(CUdeviceptr devPtr, unsigned pitch,
 			 unsigned imageWidth, unsigned imageHeight, unsigned allocationCols, unsigned allocationRows,
-			 unsigned timestamp, bool eos=false): RawFrameGPU(imageWidth, imageHeight, allocationCols, allocationRows, timestamp)
+			 unsigned timestamp, bool eos=false): RawFrameGPU(imageWidth, imageHeight, allocationCols, allocationRows, timestamp, eos)
 	{
 		// copy into a more permanent chunk of memory allocated by above ctor
 		cudaErr(cudaMemcpy2D(data(), m_pitch, reinterpret_cast<void*>(devPtr), pitch,

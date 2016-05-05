@@ -6,10 +6,11 @@
 #include "ConcurrentQueue.h"
 
 // user must specify format in constructor
-enum dataFormat
+enum encoding
 {
-	H264,
-	MJPG
+	encoding_H264,
+	encoding_MJPG,
+	encoding_NONE
 };
 
 class Decoder
@@ -19,6 +20,9 @@ private:
 
 protected:
 	ConcurrentQueue<RawFrame>& m_destQueue;
+
+	// dimensions of the video input
+	size_t m_width, m_height;
 
 public:
 	Decoder(ConcurrentQueue<RawFrame>& destQueue, bool isGPUdecoder): m_destQueue(destQueue), m_isGPUdecoder(isGPUdecoder) { }
@@ -30,8 +34,8 @@ public:
 	size_t width(void) const { return m_width; }
 	size_t height(void) const { return m_height; }
 
-	int decodeFrame(const CodedFrame& frame); // decoded frame will be put in destQueue
-	void endStream(void); // signal end of stream to the decoder
+	virtual int decodeFrame(const CodedFrame& frame) = 0; // decoded frame will be put in destQueue
+	virtual void endStream(void) = 0; // signal end of stream to the decoder
 
 	bool isGPUdecoder(void) const { return m_isGPUdecoder; }
 };

@@ -15,7 +15,7 @@
 // development
 #include <iostream>
 
-#define CODED_FRAME_NUM_TRAILING_ZEROS 8
+#define CODED_FRAME_NUM_TRAILING_ZEROS 64
 
 // more explicit
 typedef uint8_t byte;
@@ -60,7 +60,7 @@ public:
 	bool empty(void) const { return !static_cast<bool>(m_length); }
 
 	unsigned size(void) const { return m_length; } // size of allocation
-	const byte* data(void) const { return m_data.get(); } // immutable information contained
+	byte* data(void) const { return m_data.get(); } // immutable information contained
 	unsigned timestamp(void) const { return m_timestamp; } // capture time of frame
 
 	// time between frames

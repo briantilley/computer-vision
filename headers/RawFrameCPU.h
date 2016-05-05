@@ -15,7 +15,7 @@ public:
 	// make an entirely new allocation
 	RawFrameCPU(unsigned imageWidth, unsigned imageHeight, unsigned allocationCols, unsigned allocationRows,
 			 unsigned timestamp, bool eos=false): RawFrame(imageWidth, imageHeight, allocationCols, allocationRows,
-			 timestamp, eos)
+			 timestamp, false, eos)
 	{
 		// get space on the heap
 		uint8_t* newAllocation;
@@ -28,7 +28,7 @@ public:
 	// copy from given location
 	RawFrameCPU(uint8_t* data, unsigned pitch,
 			 unsigned imageWidth, unsigned imageHeight, unsigned allocationCols, unsigned allocationRows,
-			 unsigned timestamp, bool eos=false): RawFrameCPU(imageWidth, imageHeight, allocationCols, allocationRows, timestamp)
+			 unsigned timestamp, bool eos=false): RawFrameCPU(imageWidth, imageHeight, allocationCols, allocationRows, timestamp, eos)
 	{
 		// copy into a more permanent chunk of memory allocated by above ctor
 		memcpy(m_data.get(), data, allocationRows * allocationCols);
@@ -43,3 +43,4 @@ public:
 	// time between frames
 	int operator-(const RawFrameCPU& right) const { return m_timestamp - right.m_timestamp; }
 };
+

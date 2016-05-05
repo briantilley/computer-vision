@@ -8,7 +8,7 @@
 #define CONFIG_FILENAME "config/config.txt"
 
 #include "headers/V4L2cam.h"
-#include "headers/RawFrameCPU.h"
+#include "headers/DecoderCPU.h"
 
 /*
 #include "headers/NVdecoder.h"
@@ -239,13 +239,19 @@ int main(int argc, char* argv[])
 	if(!webcam.good())
 		return 1;
 
+	ConcurrentQueue<RawFrame> q;
+	DecoderCPU dec(encoding_MJPG, q);
+
 	webcam.streamOn();
 
-	for(int i = 0; i < 60; ++i)
+	for(int i = 0; i < 300; ++i)
 	{
 		CodedFrame data = webcam.retrieveCodedFrame();
+		dec.decodeFrame(data);
 		cout << "." << flush;
 	}
+
+	webcam.streamOff();
 
 	cout << endl;
 
